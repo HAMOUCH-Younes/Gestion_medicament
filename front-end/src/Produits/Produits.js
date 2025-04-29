@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import axios from 'axios';
 import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
+import Layout from '../Layout/Layout';
 
 const Produits = () => {
   const [search, setSearch] = useState('');
@@ -42,25 +43,41 @@ const Produits = () => {
     },
   });
 
+  api.interceptors.response.use(
+    (response) => response,
+    (error) => {
+      console.log('Interceptor caught error:', error.response);
+      if (error.response?.status === 401) {
+        localStorage.removeItem('token');
+        navigate('/');
+      }
+      return Promise.reject(error);
+    }
+  );
+
   useEffect(() => {
+    const token = localStorage.getItem('token');
+    console.log('Token for Produits:', token);
+    if (!token) {
+      navigate('/');
+      return;
+    }
+
     const fetchData = async () => {
       try {
         const [produitsResponse, fournisseursResponse, categoriesResponse] = await Promise.all([
           api.get('/produits'),
-          axios.get(`${apiUrl}/fournisseurs`),
-          axios.get(`${apiUrl}/categories`),
+          api.get('/fournisseurs'),
+          api.get('/categories'),
         ]);
-        console.log('Produits Response:', produitsResponse.data); // Debug log
+        console.log('Produits Response:', produitsResponse.data);
         setProduits(produitsResponse.data);
         setFournisseurs(fournisseursResponse.data);
         setCategories(categoriesResponse.data);
         setErrorMessage('');
       } catch (error) {
         console.error('Error fetching data:', error.response || error);
-        if (error.response?.status === 401) {
-          navigate('/'); // Redirect to login if unauthorized
-        }
-        setErrorMessage('Failed to load data: ' + (error.response?.data?.message || error.message));
+        setErrorMessage('Failed to load data: ' + (error.response?.data?.message || 'Unknown error'));
       }
     };
     fetchData();
@@ -96,7 +113,7 @@ const Produits = () => {
     } else if (['prix_achat', 'prix_vente', 'stock', 'alerte_stock'].includes(name)) {
       newValue = value === '' ? '' : parseFloat(value) || 0;
       if (name === 'stock') {
-        newValue = Math.floor(newValue); // Ensure stock is an integer
+        newValue = Math.floor(newValue);
       }
     }
     setEditProduit((prev) => ({
@@ -138,7 +155,7 @@ const Produits = () => {
     )
       newErrors.stock = 'Le stock doit être un entier positif';
     setErrors(newErrors);
-    console.log('Validation Errors:', newErrors); // Debug log
+    console.log('Validation Errors:', newErrors);
     return Object.keys(newErrors).length === 0;
   };
 
@@ -179,12 +196,11 @@ const Produits = () => {
       const response = await api.post('/produits', formData, {
         headers: { 'Content-Type': 'multipart/form-data' },
       });
-      console.log('POST Response:', response.data); // Debug log
+      console.log('POST Response:', response.data);
 
-      // Normalize the new product data to match GET /api/produits structure
       const normalizedProduit = {
         id: response.data.id,
-        nomProduit: response.data.nom, // Map nom to nomProduit
+        nomProduit: response.data.nom,
         categorie_id: response.data.categorie_id || null,
         categorie: newProduit.categorie_id
           ? categories.find((c) => c.id === parseInt(newProduit.categorie_id))
@@ -217,9 +233,6 @@ const Produits = () => {
       setErrorMessage('');
     } catch (error) {
       console.error('Error adding produit:', error.response || error);
-      if (error.response?.status === 401) {
-        navigate('/'); // Redirect to login if unauthorized
-      }
       if (error.response?.status === 422) {
         const errors = error.response.data.errors;
         setErrors(errors);
@@ -260,6 +273,7 @@ const Produits = () => {
     }
 
     const formData = new FormData();
+    formData.append('_method', 'PUT');
     formData.append('nom', editProduit.nom.trim());
     formData.append('prix_achat', Number(editProduit.prix_achat).toString());
     formData.append('prix_vente', Number(editProduit.prix_vente).toString());
@@ -278,39 +292,38 @@ const Produits = () => {
     }
 
     try {
-      const response = await api.put(`/produits/${editProduit.id}`, formData, {
+      const response = await api.post(`/produits/${editProduit.id}`, formData, {
         headers: {
           'Content-Type': 'multipart/form-data',
           'Accept': 'application/json',
         },
       });
       console.log('Update successful:', response.data);
+
       setProduits((prev) =>
         prev.map((produit) =>
           produit.id === editProduit.id
             ? {
-                ...response.data,
-                nomProduit: response.data.nom, // Map nom to nomProduit
-                categorie: editProduit.categorie_id
-                  ? categories.find((c) => c.id === parseInt(editProduit.categorie_id))
-                  : null,
-                prix_achat: parseFloat(response.data.prix_achat),
-                prix_vente: parseFloat(response.data.prix_vente),
-                stock: parseInt(response.data.stock),
-                alerte_stock: parseInt(response.data.alerte_stock) || 10,
-              }
+              ...response.data,
+              nomProduit: response.data.nom,
+              categorie: editProduit.categorie_id
+                ? categories.find((c) => c.id === parseInt(editProduit.categorie_id))
+                : null,
+              prix_achat: parseFloat(response.data.prix_achat),
+              prix_vente: parseFloat(response.data.prix_vente),
+              stock: parseInt(response.data.stock),
+              alerte_stock: parseInt(response.data.alerte_stock) || 10,
+            }
             : produit
         )
       );
+
       setEditProduit(null);
       setShowEditPopup(false);
       setErrors({});
       setErrorMessage('');
     } catch (error) {
       console.error('Error updating produit:', error.response || error);
-      if (error.response?.status === 401) {
-        navigate('/'); // Redirect to login if unauthorized
-      }
       if (error.response?.status === 422) {
         const errors = error.response.data.errors;
         setErrors(errors);
@@ -331,9 +344,6 @@ const Produits = () => {
       setErrorMessage('');
     } catch (error) {
       console.error('Error deleting produit:', error.response || error);
-      if (error.response?.status === 401) {
-        navigate('/'); // Redirect to login if unauthorized
-      }
       setErrorMessage('Failed to delete product: ' + (error.response?.data?.message || 'Unknown error'));
     }
   };
@@ -345,15 +355,6 @@ const Produits = () => {
 
   const handleSearch = (e) => {
     setSearch(e.target.value);
-  };
-
-  const handleLogout = () => {
-    localStorage.removeItem('token');
-    navigate('/');
-  };
-
-  const navigateTo = (path) => {
-    navigate(`/${path}`);
   };
 
   const handleDownloadAllProduits = () => {
@@ -434,10 +435,10 @@ const Produits = () => {
   const filteredProduits = showExpiring
     ? expiringProduits
     : produits.filter((produit) =>
-        produit.nomProduit && typeof produit.nomProduit === 'string'
-          ? produit.nomProduit.toLowerCase().includes(search.toLowerCase())
-          : false
-      );
+      produit.nomProduit && typeof produit.nomProduit === 'string'
+        ? produit.nomProduit.toLowerCase().includes(search.toLowerCase())
+        : false
+    );
 
   const isEditFormValid =
     editProduit &&
@@ -447,280 +448,140 @@ const Produits = () => {
     (editProduit.stock || editProduit.stock === 0);
 
   return (
-    <div className="container-fluid">
+    <Layout>
       {errorMessage && (
         <div className="alert alert-danger" role="alert">
           {errorMessage}
         </div>
       )}
-      <div className="row">
-        <div
-          className="col-md-3 col-lg-2 d-md-flex bg-dark text-white flex-column vh-100 p-0"
-          style={{
-            background: 'linear-gradient(180deg, #2c2c54 0%, #1b263b 100%)',
-            boxShadow: '3px 0 10px rgba(0,0,0,0.2)',
-          }}
-        >
-          <div
-            className="p-3 border-bottom"
-            style={{
-              borderColor: 'rgba(255,255,255,0.1) !important',
-              background: 'rgba(0,0,0,0.2)',
-            }}
+      <div className="d-flex justify-content-between align-items-center mb-4">
+        <h1>Produits</h1>
+        <div>
+          <button
+            className="btn btn-warning me-2"
+            onClick={() => setShowExpiring(!showExpiring)}
           >
-            <h4 className="text-white mb-0 d-flex align-items-center">
-              <i className="bi bi-grid me-2"></i> Menu Principal
-            </h4>
-          </div>
-          <nav className="nav flex-column flex-grow-1 p-2">
-            <button
-              className="nav-link text-white text-start btn btn-link p-2 mb-1 rounded"
-              onClick={() => navigateTo('dashboard')}
-              style={{ transition: 'all 0.3s ease', borderRadius: '8px' }}
-              onMouseEnter={(e) => {
-                e.currentTarget.style.background = 'rgba(255,255,255,0.1)';
-                e.currentTarget.style.transform = 'translateX(4px)';
-              }}
-              onMouseLeave={(e) => {
-                e.currentTarget.style.background = 'transparent';
-                e.currentTarget.style.transform = 'translateX(0)';
-              }}
-            >
-              <i className="bi bi-speedometer2 me-2"></i> Tableau de Bord
-            </button>
-            <button
-              className="nav-link text-white text-start btn btn-link p-2 mb-1 rounded"
-              onClick={() => navigateTo('produits')}
-              style={{ transition: 'all 0.3s ease', borderRadius: '8px' }}
-              onMouseEnter={(e) => {
-                e.currentTarget.style.background = 'rgba(255,255,255,0.1)';
-                e.currentTarget.style.transform = 'translateX(4px)';
-              }}
-              onMouseLeave={(e) => {
-                e.currentTarget.style.background = 'transparent';
-                e.currentTarget.style.transform = 'translateX(0)';
-              }}
-            >
-              <i className="bi bi-box-seam me-2"></i> Produits
-            </button>
-            <button
-              className="nav-link text-white text-start btn btn-link p-2 mb-1 rounded"
-              onClick={() => navigateTo('clients')}
-              style={{ transition: 'all 0.3s ease', borderRadius: '8px' }}
-              onMouseEnter={(e) => {
-                e.currentTarget.style.background = 'rgba(255,255,255,0.1)';
-                e.currentTarget.style.transform = 'translateX(4px)';
-              }}
-              onMouseLeave={(e) => {
-                e.currentTarget.style.background = 'transparent';
-                e.currentTarget.style.transform = 'translateX(0)';
-              }}
-            >
-              <i className="bi bi-people me-2"></i> Clients
-            </button>
-            <button
-              className="nav-link text-white text-start btn btn-link p-2 mb-1 rounded"
-              onClick={() => navigateTo('fournisseurs')}
-              style={{ transition: 'all 0.3s ease', borderRadius: '8px' }}
-              onMouseEnter={(e) => {
-                e.currentTarget.style.background = 'rgba(255,255,255,0.1)';
-                e.currentTarget.style.transform = 'translateX(4px)';
-              }}
-              onMouseLeave={(e) => {
-                e.currentTarget.style.background = 'transparent';
-                e.currentTarget.style.transform = 'translateX(0)';
-              }}
-            >
-              <i className="bi bi-truck me-2"></i> Fournisseurs
-            </button>
-            <button
-              className="nav-link text-white text-start btn btn-link p-2 mb-1 rounded"
-              onClick={() => navigateTo('commandes')}
-              style={{ transition: 'all 0.3s ease', borderRadius: '8px' }}
-              onMouseEnter={(e) => {
-                e.currentTarget.style.background = 'rgba(255,255,255,0.1)';
-                e.currentTarget.style.transform = 'translateX(4px)';
-              }}
-              onMouseLeave={(e) => {
-                e.currentTarget.style.background = 'transparent';
-                e.currentTarget.style.transform = 'translateX(0)';
-              }}
-            >
-              <i className="bi bi-cart me-2"></i> Commandes
-            </button>
-            <button
-              className="nav-link text-white text-start btn btn-link p-2 mb-1 rounded"
-              onClick={() => navigateTo('utilisateurs')}
-              style={{ transition: 'all 0.3s ease', borderRadius: '8px' }}
-              onMouseEnter={(e) => {
-                e.currentTarget.style.background = 'rgba(255,255,255,0.1)';
-                e.currentTarget.style.transform = 'translateX(4px)';
-              }}
-              onMouseLeave={(e) => {
-                e.currentTarget.style.background = 'transparent';
-                e.currentTarget.style.transform = 'translateX(0)';
-              }}
-            >
-              <i className="bi bi-person-gear me-2"></i> Utilisateurs
-            </button>
-          </nav>
-          <div
-            className="p-3 border-top mt-auto"
-            style={{ borderColor: 'rgba(255,255,255,0.1) !important' }}
+            {showExpiring ? 'Voir Tous les Produits' : 'Produits Expirant ce Mois'}
+          </button>
+          <button
+            className="btn btn-primary me-2"
+            onClick={() => setShowPopup(true)}
           >
-            <button
-              onClick={handleLogout}
-              className="btn btn-outline-light w-100"
-              style={{
-                transition: 'all 0.3s ease',
-                background: 'linear-gradient(45deg, #dc3545, #c82333)',
-                border: 'none',
-                color: 'white',
-              }}
-              onMouseEnter={(e) => {
-                e.currentTarget.style.transform = 'scale(1.02)';
-                e.currentTarget.style.opacity = '0.9';
-              }}
-              onMouseLeave={(e) => {
-                e.currentTarget.style.transform = 'scale(1)';
-                e.currentTarget.style.opacity = '1';
-              }}
-            >
-              <i className="bi bi-box-arrow-left me-2"></i> Déconnexion
-            </button>
-          </div>
+            <i className="bi bi-plus-circle me-2"></i>Ajouter Produit
+          </button>
+          <button
+            className="btn btn-success"
+            onClick={handleDownloadAllProduits}
+            disabled={produits.length === 0}
+          >
+            <i className="bi bi-download me-2"></i>Télécharger Tous
+          </button>
         </div>
-        <div className="col-md-9 col-lg-10 p-4">
-          <div className="d-flex justify-content-between align-items-center mb-4">
-            <h1>Produits</h1>
-            <div>
-              <button
-                className="btn btn-warning me-2"
-                onClick={() => setShowExpiring(!showExpiring)}
-              >
-                {showExpiring ? 'Voir Tous les Produits' : 'Produits Expirant ce Mois'}
-              </button>
-              <button
-                className="btn btn-primary me-2"
-                onClick={() => setShowPopup(true)}
-              >
-                <i className="bi bi-plus-circle me-2"></i>Ajouter Produit
-              </button>
-              <button
-                className="btn btn-success"
-                onClick={handleDownloadAllProduits}
-                disabled={produits.length === 0}
-              >
-                <i className="bi bi-download me-2"></i>Télécharger Tous
-              </button>
-            </div>
+      </div>
+      <div className="card border-0 shadow-sm">
+        <div className="card-body">
+          <div className="d-flex justify-content-end mb-3">
+            <input
+              type="text"
+              className="form-control"
+              style={{ maxWidth: '300px' }}
+              placeholder="Rechercher un produit..."
+              value={search}
+              onChange={handleSearch}
+              disabled={showExpiring}
+            />
           </div>
-          <div className="card border-0 shadow-sm">
-            <div className="card-body">
-              <div className="d-flex justify-content-end mb-3">
-                <input
-                  type="text"
-                  className="form-control"
-                  style={{ maxWidth: '300px' }}
-                  placeholder="Rechercher un produit..."
-                  value={search}
-                  onChange={handleSearch}
-                  disabled={showExpiring}
-                />
-              </div>
-              <div className="table-responsive" style={{ maxHeight: '500px', overflowY: 'auto' }}>
-                <table className="table table-hover align-middle">
-                  <thead className="table-dark">
-                    <tr>
-                      <th>ID</th>
-                      <th>Nom</th>
-                      <th>Catégorie</th>
-                      <th>Stock disponible</th>
-                      <th>Date Expiration</th>
-                      <th style={{ minWidth: '220px' }}>Actions</th>
+          <div className="table-responsive" style={{ maxHeight: '500px', overflowY: 'auto' }}>
+            <table className="table table-hover align-middle">
+              <thead className="table-dark">
+                <tr>
+                  <th>ID</th>
+                  <th>Nom</th>
+                  <th>Catégorie</th>
+                  <th>Stock disponible</th>
+                  <th>Date Expiration</th>
+                  <th style={{ minWidth: '220px' }}>Actions</th>
+                </tr>
+              </thead>
+              <tbody>
+                {filteredProduits.length > 0 ? (
+                  filteredProduits.map((produit) => (
+                    <tr key={produit.id}>
+                      <td
+                        onClick={() => handleProduitClick(produit)}
+                        style={{ cursor: 'pointer' }}
+                      >
+                        {produit.id}
+                      </td>
+                      <td
+                        onClick={() => handleProduitClick(produit)}
+                        style={{ cursor: 'pointer' }}
+                      >
+                        {produit.nomProduit || 'Inconnu'}
+                      </td>
+                      <td
+                        onClick={() => handleProduitClick(produit)}
+                        style={{ cursor: 'pointer' }}
+                      >
+                        {produit.categorie ? produit.categorie.nom : getCategorieName(produit.categorie_id)}
+                      </td>
+                      <td
+                        onClick={() => handleProduitClick(produit)}
+                        style={{ cursor: 'pointer' }}
+                        className={produit.stock <= produit.alerte_stock ? 'text-danger' : ''}
+                      >
+                        {produit.stock}
+                      </td>
+                      <td
+                        onClick={() => handleProduitClick(produit)}
+                        style={{ cursor: 'pointer' }}
+                      >
+                        {produit.date_expiration || '-'}
+                      </td>
+                      <td>
+                        <button
+                          className="btn btn-primary me-2"
+                          style={{
+                            backgroundColor: '#007bff',
+                            borderColor: '#007bff',
+                            padding: '6px 12px',
+                            fontSize: '14px',
+                            minWidth: '80px',
+                          }}
+                          onClick={() => handleEditClick(produit)}
+                          title="Éditer"
+                        >
+                          <i className="bi bi-pencil me-1"></i> Éditer
+                        </button>
+                        <button
+                          className="btn btn-danger"
+                          style={{
+                            backgroundColor: '#dc3545',
+                            borderColor: '#dc3545',
+                            padding: '6px 12px',
+                            fontSize: '14px',
+                            minWidth: '80px',
+                          }}
+                          onClick={() => {
+                            setProduitToDelete(produit);
+                            setShowDeletePopup(true);
+                          }}
+                          title="Supprimer"
+                        >
+                          <i className="bi bi-trash me-1"></i> Supprimer
+                        </button>
+                      </td>
                     </tr>
-                  </thead>
-                  <tbody>
-                    {filteredProduits.length > 0 ? (
-                      filteredProduits.map((produit) => (
-                        <tr key={produit.id}>
-                          <td
-                            onClick={() => handleProduitClick(produit)}
-                            style={{ cursor: 'pointer' }}
-                          >
-                            {produit.id}
-                          </td>
-                          <td
-                            onClick={() => handleProduitClick(produit)}
-                            style={{ cursor: 'pointer' }}
-                          >
-                            {produit.nomProduit || 'Inconnu'}
-                          </td>
-                          <td
-                            onClick={() => handleProduitClick(produit)}
-                            style={{ cursor: 'pointer' }}
-                          >
-                            {produit.categorie ? produit.categorie.nom : getCategorieName(produit.categorie_id)}
-                          </td>
-                          <td
-                            onClick={() => handleProduitClick(produit)}
-                            style={{ cursor: 'pointer' }}
-                            className={produit.stock <= produit.alerte_stock ? 'text-danger' : ''}
-                          >
-                            {produit.stock}
-                          </td>
-                          <td
-                            onClick={() => handleProduitClick(produit)}
-                            style={{ cursor: 'pointer' }}
-                          >
-                            {produit.date_expiration || '-'}
-                          </td>
-                          <td>
-                            <button
-                              className="btn btn-primary me-2"
-                              style={{
-                                backgroundColor: '#007bff',
-                                borderColor: '#007bff',
-                                padding: '6px 12px',
-                                fontSize: '14px',
-                                minWidth: '80px',
-                              }}
-                              onClick={() => handleEditClick(produit)}
-                              title="Éditer"
-                            >
-                              <i className="bi bi-pencil me-1"></i> Éditer
-                            </button>
-                            <button
-                              className="btn btn-danger"
-                              style={{
-                                backgroundColor: '#dc3545',
-                                borderColor: '#dc3545',
-                                padding: '6px 12px',
-                                fontSize: '14px',
-                                minWidth: '80px',
-                              }}
-                              onClick={() => {
-                                setProduitToDelete(produit);
-                                setShowDeletePopup(true);
-                              }}
-                              title="Supprimer"
-                            >
-                              <i className="bi bi-trash me-1"></i> Supprimer
-                            </button>
-                          </td>
-                        </tr>
-                      ))
-                    ) : (
-                      <tr>
-                        <td colSpan="6" className="text-center">
-                          Aucun produit {showExpiring ? 'expirant ce mois' : 'trouvé'}
-                        </td>
-                      </tr>
-                    )}
-                  </tbody>
-                </table>
-              </div>
-            </div>
+                  ))
+                ) : (
+                  <tr>
+                    <td colSpan="6" className="text-center">
+                      Aucun produit {showExpiring ? 'expirant ce mois' : 'trouvé'}
+                    </td>
+                  </tr>
+                )}
+              </tbody>
+            </table>
           </div>
         </div>
       </div>
@@ -1260,7 +1121,7 @@ const Produits = () => {
           </div>
         </div>
       )}
-    </div>
+    </Layout>
   );
 };
 

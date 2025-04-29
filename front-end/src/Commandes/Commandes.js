@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import axios from 'axios';
 import { jsPDF } from 'jspdf';
+import Layout from '../Layout/Layout';
 
 const Commandes = () => {
   const [search, setSearch] = useState('');
@@ -76,6 +77,10 @@ const Commandes = () => {
     };
     fetchData();
   }, [navigate]);
+
+  const navigateTo = (path) => {
+    navigate(`/${path}`);
+  };
 
   const handleLogout = async () => {
     try {
@@ -585,11 +590,13 @@ const Commandes = () => {
 
   if (loading) {
     return (
-      <div className="d-flex justify-content-center align-items-center vh-100">
-        <div className="spinner-border text-primary" role="status">
-          <span className="visually-hidden">Chargement...</span>
+      <Layout>
+        <div className="d-flex justify-content-center align-items-center vh-100">
+          <div className="spinner-border text-primary" role="status">
+            <span className="visually-hidden">Chargement...</span>
+          </div>
         </div>
-      </div>
+      </Layout>
     );
   }
 
@@ -598,703 +605,553 @@ const Commandes = () => {
   }
 
   return (
-    <div className="container-fluid">
-      {errorMessage && (
-        <div className="alert alert-danger" role="alert">
-          {errorMessage}
-        </div>
-      )}
-      <div className="row">
-        <div
-          className="col-md-3 col-lg-2 d-md-flex bg-dark text-white flex-column vh-100 p-0"
-          style={{
-            background: 'linear-gradient(180deg, #2c2c54 0%, #1b263b 100%)',
-            boxShadow: '3px 0 10px rgba(0,0,0,0.2)'
-          }}
-        >
-          <div
-            className="p-3 border-bottom"
-            style={{
-              borderColor: 'rgba(255,255,255,0.1) !important',
-              background: 'rgba(0,0,0,0.2)'
-            }}
-          >
-            <h4 className="text-white mb-0 d-flex align-items-center">
-              <i className="bi bi-grid me-2"></i> Menu Principal
-            </h4>
+    <Layout currentUser={currentUser} navigateTo={navigateTo} handleLogout={handleLogout}>
+      <div className="container-fluid p-4">
+        {errorMessage && (
+          <div className="alert alert-danger" role="alert">
+            {errorMessage}
           </div>
-          <nav className="nav flex-column flex-grow-1 p-2">
-            {currentUser.permissions.dashboard && (
+        )}
+        <div className="d-flex justify-content-between align-items-center mb-4">
+          <h1>Commandes</h1>
+          <div>
+            {currentUser.role !== 'User' && (
               <button
-                className="nav-link text-white text-start btn btn-link p-2 mb-1 rounded"
-                onClick={() => navigate('/dashboard')}
-                style={{ transition: 'all 0.3s ease', borderRadius: '8px' }}
-                onMouseEnter={(e) => {
-                  e.currentTarget.style.background = 'rgba(255,255,255,0.1)';
-                  e.currentTarget.style.transform = 'translateX(4px)';
-                }}
-                onMouseLeave={(e) => {
-                  e.currentTarget.style.background = 'transparent';
-                  e.currentTarget.style.transform = 'translateX(0)';
-                }}
+                className="btn btn-primary me-2"
+                onClick={() => setShowPopup(true)}
               >
-                <i className="bi bi-speedometer2 me-2"></i> Tableau de Bord
+                <i className="bi bi-plus-circle me-2"></i>Ajouter Commande
               </button>
             )}
-            {currentUser.permissions.produits && (
-              <button
-                className="nav-link text-white text-start btn btn-link p-2 mb-1 rounded"
-                onClick={() => navigate('/produits')}
-                style={{ transition: 'all 0.3s ease', borderRadius: '8px' }}
-                onMouseEnter={(e) => {
-                  e.currentTarget.style.background = 'rgba(255,255,255,0.1)';
-                  e.currentTarget.style.transform = 'translateX(4px)';
-                }}
-                onMouseLeave={(e) => {
-                  e.currentTarget.style.background = 'transparent';
-                  e.currentTarget.style.transform = 'translateX(0)';
-                }}
-              >
-                <i className="bi bi-box-seam me-2"></i> Produits
-              </button>
-            )}
-            {currentUser.permissions.clients && (
-              <button
-                className="nav-link text-white text-start btn btn-link p-2 mb-1 rounded"
-                onClick={() => navigate('/clients')}
-                style={{ transition: 'all 0.3s ease', borderRadius: '8px' }}
-                onMouseEnter={(e) => {
-                  e.currentTarget.style.background = 'rgba(255,255,255,0.1)';
-                  e.currentTarget.style.transform = 'translateX(4px)';
-                }}
-                onMouseLeave={(e) => {
-                  e.currentTarget.style.background = 'transparent';
-                  e.currentTarget.style.transform = 'translateX(0)';
-                }}
-              >
-                <i className="bi bi-people me-2"></i> Clients
-              </button>
-            )}
-            {currentUser.permissions.fournisseurs && (
-              <button
-                className="nav-link text-white text-start btn btn-link p-2 mb-1 rounded"
-                onClick={() => navigate('/fournisseurs')}
-                style={{ transition: 'all 0.3s ease', borderRadius: '8px' }}
-                onMouseEnter={(e) => {
-                  e.currentTarget.style.background = 'rgba(255,255,255,0.1)';
-                  e.currentTarget.style.transform = 'translateX(4px)';
-                }}
-                onMouseLeave={(e) => {
-                  e.currentTarget.style.background = 'transparent';
-                  e.currentTarget.style.transform = 'translateX(0)';
-                }}
-              >
-                <i className="bi bi-truck me-2"></i> Fournisseurs
-              </button>
-            )}
-            {currentUser.permissions.commandes && (
-              <button
-                className="nav-link text-white text-start btn btn-link p-2 mb-1 rounded"
-                onClick={() => navigate('/commandes')}
-                style={{ transition: 'all 0.3s ease', borderRadius: '8px' }}
-                onMouseEnter={(e) => {
-                  e.currentTarget.style.background = 'rgba(255,255,255,0.1)';
-                  e.currentTarget.style.transform = 'translateX(4px)';
-                }}
-                onMouseLeave={(e) => {
-                  e.currentTarget.style.background = 'transparent';
-                  e.currentTarget.style.transform = 'translateX(0)';
-                }}
-              >
-                <i className="bi bi-cart me-2"></i> Commandes
-              </button>
-            )}
-            {currentUser.permissions.utilisateurs && (
-              <button
-                className="nav-link text-white text-start btn btn-link p-2 mb-1 rounded"
-                onClick={() => navigate('/utilisateurs')}
-                style={{ transition: 'all 0.3s ease', borderRadius: '8px' }}
-                onMouseEnter={(e) => {
-                  e.currentTarget.style.background = 'rgba(255,255,255,0.1)';
-                  e.currentTarget.style.transform = 'translateX(4px)';
-                }}
-                onMouseLeave={(e) => {
-                  e.currentTarget.style.background = 'transparent';
-                  e.currentTarget.style.transform = 'translateX(0)';
-                }}
-              >
-                <i className="bi bi-person-gear me-2"></i> Utilisateurs
-              </button>
-            )}
-          </nav>
-          <div
-            className="p-3 border-top mt-auto"
-            style={{ borderColor: 'rgba(255,255,255,0.1) !important' }}
-          >
             <button
-              onClick={handleLogout}
-              className="btn btn-outline-light w-100"
-              style={{
-                transition: 'all 0.3s ease',
-                background: 'linear-gradient(45deg, #dc3545, #c82333)',
-                border: 'none',
-                color: 'white'
-              }}
-              onMouseEnter={(e) => {
-                e.currentTarget.style.transform = 'scale(1.02)';
-                e.currentTarget.style.opacity = '0.9';
-              }}
-              onMouseLeave={(e) => {
-                e.currentTarget.style.transform = 'scale(1)';
-                e.currentTarget.style.opacity = '1';
-              }}
+              className="btn btn-success"
+              onClick={handleDownloadAllCommandes}
+              disabled={commandes.length === 0}
             >
-              <i className="bi bi-box-arrow-left me-2"></i> Déconnexion
+              <i className="bi bi-download me-2"></i>Télécharger Toutes
             </button>
           </div>
         </div>
-        <div className="col-md-9 col-lg-10 p-4">
-          <div className="d-flex justify-content-between align-items-center mb-4">
-            <h1>Commandes</h1>
-            <div>
-              {currentUser.role !== 'User' && (
-                <button
-                  className="btn btn-primary me-2"
-                  onClick={() => setShowPopup(true)}
-                >
-                  <i className="bi bi-plus-circle me-2"></i>Ajouter Commande
-                </button>
-              )}
-              <button
-                className="btn btn-success"
-                onClick={handleDownloadAllCommandes}
-                disabled={commandes.length === 0}
-              >
-                <i className="bi bi-download me-2"></i>Télécharger Toutes
-              </button>
-            </div>
-          </div>
-          <div className="card border-0 shadow-sm">
-            <div className="card-body">
-              <div className="d-flex justify-content-end mb-3 flex-wrap">
-                <div className="me-3 mb-2">
-                  <input
-                    type="text"
-                    className="form-control"
-                    style={{ maxWidth: '300px' }}
-                    placeholder="Rechercher par client..."
-                    value={search}
-                    onChange={handleSearch}
-                  />
-                </div>
-                <div className="mb-2">
-                  <input
-                    type="date"
-                    className="form-control"
-                    style={{ maxWidth: '200px' }}
-                    placeholder="Filtrer par date"
-                    value={filterDate}
-                    onChange={handleFilterDateChange}
-                  />
-                </div>
+        <div className="card border-0 shadow-sm">
+          <div className="card-body">
+            <div className="d-flex justify-content-end mb-3 flex-wrap">
+              <div className="me-3 mb-2">
+                <input
+                  type="text"
+                  className="form-control"
+                  style={{ maxWidth: '300px' }}
+                  placeholder="Rechercher par client..."
+                  value={search}
+                  onChange={handleSearch}
+                />
               </div>
-              <div className="table-responsive" style={{ maxHeight: '500px', overflowY: 'auto' }}>
-                <table className="table table-hover align-middle">
-                  <thead className="table-dark">
-                    <tr>
-                      <th>ID</th>
-                      <th>Client</th>
-                      <th>Créée par</th>
-                      <th>Date</th>
-                      <th>Total (DH)</th>
-                      <th>Statut</th>
-                      <th>Statut de Paiement</th>
-                      <th style={{ minWidth: '220px' }}>Actions</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {filteredCommandes.length > 0 ? (
-                      filteredCommandes.map((commande) => (
-                        <tr key={commande.id}>
-                          <td onClick={() => handleCommandeClick(commande)} style={{ cursor: 'pointer' }}>{commande.id}</td>
-                          <td onClick={() => handleCommandeClick(commande)} style={{ cursor: 'pointer' }}>{commande.client}</td>
-                          <td onClick={() => handleCommandeClick(commande)} style={{ cursor: 'pointer' }}>{commande.user || 'Unknown'}</td>
-                          <td onClick={() => handleCommandeClick(commande)} style={{ cursor: 'pointer' }}>{commande.date}</td>
-                          <td onClick={() => handleCommandeClick(commande)} style={{ cursor: 'pointer' }}>{calculateTotal(commande.produits)}</td>
-                          <td onClick={() => handleCommandeClick(commande)} style={{ cursor: 'pointer' }}>{commande.status}</td>
-                          <td onClick={() => handleCommandeClick(commande)} style={{ cursor: 'pointer' }}>{commande.paymentStatus}</td>
-                          <td onClick={(e) => e.stopPropagation()}>
-                            {currentUser.role !== 'User' && (
-                              <>
-                                <button
-                                  className="btn btn-primary me-2"
-                                  onClick={(e) => handleEditClick(e, commande)}
-                                >
-                                  <i className="bi bi-pencil"></i> Éditer
-                                </button>
-                                <button
-                                  className="btn btn-danger"
-                                  onClick={(e) => handleDeleteClick(e, commande.id)}
-                                >
-                                  <i className="bi bi-trash"></i> Supprimer
-                                </button>
-                              </>
-                            )}
-                          </td>
-                        </tr>
-                      ))
-                    ) : (
-                      <tr>
-                        <td colSpan="8" className="text-center">
-                          Aucune commande trouvée
+              <div className="mb-2">
+                <input
+                  type="date"
+                  className="form-control"
+                  style={{ maxWidth: '200px' }}
+                  placeholder="Filtrer par date"
+                  value={filterDate}
+                  onChange={handleFilterDateChange}
+                />
+              </div>
+            </div>
+            <div className="table-responsive" style={{ maxHeight: '500px', overflowY: 'auto' }}>
+              <table className="table table-hover align-middle">
+                <thead className="table-dark">
+                  <tr>
+                    <th>ID</th>
+                    <th>Client</th>
+                    <th>Créée par</th>
+                    <th>Date</th>
+                    <th>Total (DH)</th>
+                    <th>Statut</th>
+                    <th>Statut de Paiement</th>
+                    <th style={{ minWidth: '220px' }}>Actions</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {filteredCommandes.length > 0 ? (
+                    filteredCommandes.map((commande) => (
+                      <tr key={commande.id}>
+                        <td onClick={() => handleCommandeClick(commande)} style={{ cursor: 'pointer' }}>{commande.id}</td>
+                        <td onClick={() => handleCommandeClick(commande)} style={{ cursor: 'pointer' }}>{commande.client}</td>
+                        <td onClick={() => handleCommandeClick(commande)} style={{ cursor: 'pointer' }}>{commande.user || 'Unknown'}</td>
+                        <td onClick={() => handleCommandeClick(commande)} style={{ cursor: 'pointer' }}>{commande.date}</td>
+                        <td onClick={() => handleCommandeClick(commande)} style={{ cursor: 'pointer' }}>{calculateTotal(commande.produits)}</td>
+                        <td onClick={() => handleCommandeClick(commande)} style={{ cursor: 'pointer' }}>{commande.status}</td>
+                        <td onClick={() => handleCommandeClick(commande)} style={{ cursor: 'pointer' }}>{commande.paymentStatus}</td>
+                        <td onClick={(e) => e.stopPropagation()}>
+                          {currentUser.role !== 'User' && (
+                            <>
+                              <button
+                                className="btn btn-primary me-2"
+                                onClick={(e) => handleEditClick(e, commande)}
+                              >
+                                <i className="bi bi-pencil"></i> Éditer
+                              </button>
+                              <button
+                                className="btn btn-danger"
+                                onClick={(e) => handleDeleteClick(e, commande.id)}
+                              >
+                                <i className="bi bi-trash"></i> Supprimer
+                              </button>
+                            </>
+                          )}
                         </td>
                       </tr>
-                    )}
-                  </tbody>
-                </table>
-              </div>
-            </div>
-          </div>
-        </div>
-      </div>
-
-      {showPopup && (
-        <div
-          className="modal d-block"
-          style={{ backgroundColor: 'rgba(0,0,0,0.5)' }}
-          onClick={() => setShowPopup(false)}
-        >
-          <div
-            className="modal-dialog modal-lg"
-            onClick={(e) => e.stopPropagation()}
-          >
-            <div className="modal-content">
-              <div className="modal-header">
-                <h5 className="modal-title">Ajouter une Nouvelle Commande</h5>
-                <button
-                  type="button"
-                  className="btn-close"
-                  onClick={() => setShowPopup(false)}
-                ></button>
-              </div>
-              <div className="modal-body">
-                {errorMessage && (
-                  <div className="alert alert-danger" role="alert">
-                    {errorMessage}
-                  </div>
-                )}
-                <form onSubmit={handleAddCommande}>
-                  <div className="row">
-                    <div className="col-md-6 mb-3">
-                      <label className="form-label">Client</label>
-                      <select
-                        className="form-control"
-                        name="client_id"
-                        value={newCommande.client_id}
-                        onChange={handleCommandeInputChange}
-                        required
-                      >
-                        <option value="">Sélectionner un client</option>
-                        {clients.map(client => (
-                          <option key={client.id} value={client.id}>{client.nom}</option>
-                        ))}
-                      </select>
-                    </div>
-                    <div className="col-md-6 mb-3">
-                      <label className="form-label">Date</label>
-                      <input
-                        type="date"
-                        className="form-control"
-                        name="date"
-                        value={newCommande.date}
-                        onChange={handleCommandeInputChange}
-                        required
-                      />
-                    </div>
-                    <div className="col-md-6 mb-3">
-                      <label className="form-label">Statut</label>
-                      <select
-                        className="form-control"
-                        name="status"
-                        value={newCommande.status}
-                        onChange={handleCommandeInputChange}
-                        required
-                      >
-                        <option value="En cours">En cours</option>
-                        <option value="Livré">Livré</option>
-                        <option value="Annulé">Annulé</option>
-                      </select>
-                    </div>
-                    <div className="col-md-6 mb-3">
-                      <label className="form-label">Statut de Paiement</label>
-                      <select
-                        className="form-control"
-                        name="payment_status"
-                        value={newCommande.payment_status}
-                        onChange={handleCommandeInputChange}
-                        required
-                      >
-                        <option value="En cours">En cours</option>
-                        <option value="Payé">Payé</option>
-                        <option value="Annulé">Annulé</option>
-                      </select>
-                    </div>
-                  </div>
-                  <div className="mt-3">
-                    <h6>Ajouter un Produit</h6>
-                    <div className="row">
-                      <div className="col-md-4 mb-3">
-                        <label className="form-label">Produit</label>
-                        <select
-                          className="form-control"
-                          name="produit_id"
-                          value={newProduit.produit_id}
-                          onChange={handleProduitInputChange}
-                        >
-                          <option value="">Sélectionner un produit</option>
-                          {produits.map(produit => (
-                            <option key={produit.id} value={produit.id}>{produit.nomProduit}</option>
-                          ))}
-                        </select>
-                      </div>
-                      <div className="col-md-3 mb-3">
-                        <label className="form-label">Prix (DH)</label>
-                        <input
-                          type="number"
-                          className="form-control"
-                          name="prix"
-                          value={newProduit.prix}
-                          onChange={handleProduitInputChange}
-                          step="0.01"
-                        />
-                      </div>
-                      <div className="col-md-3 mb-3">
-                        <label className="form-label">Quantité</label>
-                        <input
-                          type="number"
-                          className="form-control"
-                          name="quantite"
-                          value={newProduit.quantite}
-                          onChange={handleProduitInputChange}
-                          min="1"
-                        />
-                      </div>
-                      <div className="col-md-2 mb-3 d-flex align-items-end">
-                        <button
-                          type="button"
-                          className="btn btn-primary w-100"
-                          onClick={() => handleAddProduit()}
-                        >
-                          <i className="bi bi-plus-circle"></i>
-                        </button>
-                      </div>
-                    </div>
-                    {newCommande.produits.length > 0 && (
-                      <div className="mt-3">
-                        <h6>Produits Sélectionnés</h6>
-                        <table className="table table-sm">
-                          <thead>
-                            <tr>
-                              <th>Nom</th>
-                              <th>Prix (DH)</th>
-                              <th>Quantité</th>
-                              <th>Action</th>
-                            </tr>
-                          </thead>
-                          <tbody>
-                            {newCommande.produits.map((produit, index) => (
-                              <tr key={index}>
-                                <td>{produits.find(p => p.id === produit.produit_id)?.nomProduit || 'Produit inconnu'}</td>
-                                <td>{produit.prix.toFixed(2)}</td>
-                                <td>{produit.quantite}</td>
-                                <td>
-                                  <button
-                                    type="button"
-                                    className="btn btn-danger btn-sm"
-                                    onClick={() => handleRemoveProduit(index)}
-                                  >
-                                    <i className="bi bi-trash"></i>
-                                  </button>
-                                </td>
-                              </tr>
-                            ))}
-                          </tbody>
-                        </table>
-                      </div>
-                    )}
-                  </div>
-                  <div className="modal-footer">
-                    <button
-                      type="button"
-                      className="btn btn-secondary"
-                      onClick={() => setShowPopup(false)}
-                    >
-                      Annuler
-                    </button>
-                    <button type="submit" className="btn btn-primary">
-                      Ajouter Commande
-                    </button>
-                  </div>
-                </form>
-              </div>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {showEditPopup && editCommande && (
-        <div
-          className="modal d-block"
-          style={{ backgroundColor: 'rgba(0,0,0,0.5)' }}
-          onClick={() => setShowEditPopup(false)}
-        >
-          <div
-            className="modal-dialog modal-lg"
-            onClick={(e) => e.stopPropagation()}
-          >
-            <div className="modal-content">
-              <div className="modal-header">
-                <h5 className="modal-title">Modifier la Commande: {editCommande.id}</h5>
-                <button
-                  type="button"
-                  className="btn-close"
-                  onClick={() => setShowEditPopup(false)}
-                ></button>
-              </div>
-              <div className="modal-body">
-                {errorMessage && (
-                  <div className="alert alert-danger" role="alert">
-                    {errorMessage}
-                  </div>
-                )}
-                <form onSubmit={handleEditCommande}>
-                  <div className="row">
-                    <div className="col-md-6 mb-3">
-                      <label className="form-label">Client</label>
-                      <select
-                        className="form-control"
-                        name="client_id"
-                        value={editCommande.client_id}
-                        onChange={handleEditCommandeInputChange}
-                        required
-                      >
-                        <option value="">Sélectionner un client</option>
-                        {clients.map(client => (
-                          <option key={client.id} value={client.id}>{client.nom}</option>
-                        ))}
-                      </select>
-                    </div>
-                    <div className="col-md-6 mb-3">
-                      <label className="form-label">Date</label>
-                      <input
-                        type="date"
-                        className="form-control"
-                        name="date"
-                        value={editCommande.date}
-                        onChange={handleEditCommandeInputChange}
-                        required
-                      />
-                    </div>
-                    <div className="col-md-6 mb-3">
-                      <label className="form-label">Statut</label>
-                      <select
-                        className="form-control"
-                        name="status"
-                        value={editCommande.status}
-                        onChange={handleEditCommandeInputChange}
-                        required
-                      >
-                        <option value="En cours">En cours</option>
-                        <option value="Livré">Livré</option>
-                        <option value="Annulé">Annulé</option>
-                      </select>
-                    </div>
-                    <div className="col-md-6 mb-3">
-                      <label className="form-label">Statut de Paiement</label>
-                      <select
-                        className="form-control"
-                        name="payment_status"
-                        value={editCommande.payment_status}
-                        onChange={handleEditCommandeInputChange}
-                        required
-                      >
-                        <option value="En cours">En cours</option>
-                        <option value="Payé">Payé</option>
-                        <option value="Annulé">Annulé</option>
-                      </select>
-                    </div>
-                  </div>
-                  <div className="mt-3">
-                    <h6>Ajouter un Produit</h6>
-                    <div className="row">
-                      <div className="col-md-4 mb-3">
-                        <label className="form-label">Produit</label>
-                        <select
-                          className="form-control"
-                          name="produit_id"
-                          value={newProduit.produit_id}
-                          onChange={handleProduitInputChange}
-                        >
-                          <option value="">Sélectionner un produit</option>
-                          {produits.map(produit => (
-                            <option key={produit.id} value={produit.id}>{produit.nomProduit}</option>
-                          ))}
-                        </select>
-                      </div>
-                      <div className="col-md-3 mb-3">
-                        <label className="form-label">Prix (DH)</label>
-                        <input
-                          type="number"
-                          className="form-control"
-                          name="prix"
-                          value={newProduit.prix}
-                          onChange={handleProduitInputChange}
-                          step="0.01"
-                        />
-                      </div>
-                      <div className="col-md-3 mb-3">
-                        <label className="form-label">Quantité</label>
-                        <input
-                          type="number"
-                          className="form-control"
-                          name="quantite"
-                          value={newProduit.quantite}
-                          onChange={handleProduitInputChange}
-                          min="1"
-                        />
-                      </div>
-                      <div className="col-md-2 mb-3 d-flex align-items-end">
-                        <button
-                          type="button"
-                          className="btn btn-primary w-100"
-                          onClick={() => handleAddProduit(true)}
-                        >
-                          <i className="bi bi-plus-circle"></i>
-                        </button>
-                      </div>
-                    </div>
-                    {editCommande.produits.length > 0 && (
-                      <div className="mt-3">
-                        <h6>Produits Sélectionnés</h6>
-                        <table className="table table-sm">
-                          <thead>
-                            <tr>
-                              <th>Nom</th>
-                              <th>Prix (DH)</th>
-                              <th>Quantité</th>
-                              <th>Action</th>
-                            </tr>
-                          </thead>
-                          <tbody>
-                            {editCommande.produits.map((produit, index) => (
-                              <tr key={index}>
-                                <td>{produits.find(p => p.id === produit.produit_id)?.nomProduit || 'Produit inconnu'}</td>
-                                <td>{typeof produit.prix === 'number' ? produit.prix.toFixed(2) : 'N/A'}</td>
-                                <td>{produit.quantite}</td>
-                                <td>
-                                  <button
-                                    type="button"
-                                    className="btn btn-danger btn-sm"
-                                    onClick={() => handleRemoveProduit(index, true)}
-                                  >
-                                    <i className="bi bi-trash"></i>
-                                  </button>
-                                </td>
-                              </tr>
-                            ))}
-                          </tbody>
-                        </table>
-                      </div>
-                    )}
-                  </div>
-                  <div className="modal-footer">
-                    <button
-                      type="button"
-                      className="btn btn-secondary"
-                      onClick={() => setShowEditPopup(false)}
-                    >
-                      Annuler
-                    </button>
-                    <button type="submit" className="btn btn-primary">
-                      Enregistrer
-                    </button>
-                  </div>
-                </form>
-              </div>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {showDetailPopup && selectedCommande && (
-        <div
-          className="modal d-block"
-          style={{ backgroundColor: 'rgba(0,0,0,0.5)' }}
-          onClick={() => setShowDetailPopup(false)}
-        >
-          <div
-            className="modal-dialog modal-lg"
-            onClick={(e) => e.stopPropagation()}
-          >
-            <div className="modal-content">
-              <div className="modal-header">
-                <h5 className="modal-title">Détails de la Commande: {selectedCommande.id}</h5>
-                <button
-                  type="button"
-                  className="btn-close"
-                  onClick={() => setShowDetailPopup(false)}
-                ></button>
-              </div>
-              <div className="modal-body">
-                <p><strong>Client:</strong> {selectedCommande.client}</p>
-                <p><strong>Créée par:</strong> {selectedCommande.user || 'Unknown'}</p>
-                <p><strong>Date:</strong> {selectedCommande.date}</p>
-                <p><strong>Statut:</strong> {selectedCommande.status}</p>
-                <p><strong>Statut de Paiement:</strong> {selectedCommande.paymentStatus}</p>
-                <p><strong>Total:</strong> {calculateTotal(selectedCommande.produits)} DH</p>
-                <h6>Produits</h6>
-                <table className="table table-sm">
-                  <thead>
+                    ))
+                  ) : (
                     <tr>
-                      <th>Nom</th>
-                      <th>Prix (DH)</th>
-                      <th>Quantité</th>
-                      <th>Total (DH)</th>
+                      <td colSpan="8" className="text-center">
+                        Aucune commande trouvée
+                      </td>
                     </tr>
-                  </thead>
-                  <tbody>
-                    {selectedCommande.produits.map((produit, index) => (
-                      <tr key={index}>
-                        <td>{produit.nomProduit}</td>
-                        <td>{produit.prix.toFixed(2)}</td>
-                        <td>{produit.quantite}</td>
-                        <td>{(produit.prix * produit.quantite).toFixed(2)}</td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-                <div className="modal-footer">
+                  )}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+
+        {showPopup && (
+          <div
+            className="modal d-block"
+            style={{ backgroundColor: 'rgba(0,0,0,0.5)' }}
+            onClick={() => setShowPopup(false)}
+          >
+            <div
+              className="modal-dialog modal-lg"
+              onClick={(e) => e.stopPropagation()}
+            >
+              <div className="modal-content">
+                <div className="modal-header">
+                  <h5 className="modal-title">Ajouter une Nouvelle Commande</h5>
                   <button
                     type="button"
-                    className="btn btn-secondary"
-                    onClick={() => setShowDetailPopup(false)}
-                  >
-                    Fermer
-                  </button>
-                  <button
-                    type="button"
-                    className="btn btn-success"
-                    onClick={() => handleDownloadBonCommande(selectedCommande)}
-                  >
-                    Télécharger Bon de Commande
-                  </button>
+                    className="btn-close"
+                    onClick={() => setShowPopup(false)}
+                  ></button>
+                </div>
+                <div className="modal-body">
+                  {errorMessage && (
+                    <div className="alert alert-danger" role="alert">
+                      {errorMessage}
+                    </div>
+                  )}
+                  <form onPhysicsInfoSubmit={handleAddCommande}>
+                    <div className="row">
+                      <div className="col-md-6 mb-3">
+                        <label className="form-label">Client</label>
+                        <select
+                          className="form-control"
+                          name="client_id"
+                          value={newCommande.client_id}
+                          onChange={handleCommandeInputChange}
+                          required
+                        >
+                          <option value="">Sélectionner un client</option>
+                          {clients.map(client => (
+                            <option key={client.id} value={client.id}>{client.nom}</option>
+                          ))}
+                        </select>
+                      </div>
+                      <div className="col-md-6 mb-3">
+                        <label className="form-label">Date</label>
+                        <input
+                          type="date"
+                          className="form-control"
+                          name="date"
+                          value={newCommande.date}
+                          onChange={handleCommandeInputChange}
+                          required
+                        />
+                      </div>
+                      <div className="col-md-6 mb-3">
+                        <label className="form-label">Statut</label>
+                        <select
+                          className="form-control"
+                          name="status"
+                          value={newCommande.status}
+                          onChange={handleCommandeInputChange}
+                          required
+                        >
+                          <option value="En cours">En cours</option>
+                          <option value="Livré">Livré</option>
+                          <option value="Annulé">Annulé</option>
+                        </select>
+                      </div>
+                      <div className="col-md-6 mb-3">
+                        <label className="form-label">Statut de Paiement</label>
+                        <select
+                          className="form-control"
+                          name="payment_status"
+                          value={newCommande.payment_status}
+                          onChange={handleCommandeInputChange}
+                          required
+                        >
+                          <option value="En cours">En cours</option>
+                          <option value="Payé">Payé</option>
+                          <option value="Annulé">Annulé</option>
+                        </select>
+                      </div>
+                    </div>
+                    <div className="mt-3">
+                      <h6>Ajouter un Produit</h6>
+                      <div className="row">
+                        <div className="col-md-4 mb-3">
+                          <label className="form-label">Produit</label>
+                          <select
+                            className="form-control"
+                            name="produit_id"
+                            value={newProduit.produit_id}
+                            onChange={handleProduitInputChange}
+                          >
+                            <option value="">Sélectionner un produit</option>
+                            {produits.map(produit => (
+                              <option key={produit.id} value={produit.id}>{produit.nomProduit}</option>
+                            ))}
+                          </select>
+                        </div>
+                        <div className="col-md-3 mb-3">
+                          <label className="form-label">Prix (DH)</label>
+                          <input
+                            type="number"
+                            className="form-control"
+                            name="prix"
+                            value={newProduit.prix}
+                            onChange={handleProduitInputChange}
+                            step="0.01"
+                          />
+                        </div>
+                        <div className="col-md-3 mb-3">
+                          <label className="form-label">Quantité</label>
+                          <input
+                            type="number"
+                            className="form-control"
+                            name="quantite"
+                            value={newProduit.quantite}
+                            onChange={handleProduitInputChange}
+                            min="1"
+                          />
+                        </div>
+                        <div className="col-md-2 mb-3 d-flex align-items-end">
+                          <button
+                            type="button"
+                            className="btn btn-primary w-100"
+                            onClick={() => handleAddProduit()}
+                          >
+                            <i className="bi bi-plus-circle"></i>
+                          </button>
+                        </div>
+                      </div>
+                      {newCommande.produits.length > 0 && (
+                        <div className="mt-3">
+                          <h6>Produits Sélectionnés</h6>
+                          <table className="table table-sm">
+                            <thead>
+                              <tr>
+                                <th>Nom</th>
+                                <th>Prix (DH)</th>
+                                <th>Quantité</th>
+                                <th>Action</th>
+                              </tr>
+                            </thead>
+                            <tbody>
+                              {newCommande.produits.map((produit, index) => (
+                                <tr key={index}>
+                                  <td>{produits.find(p => p.id === produit.produit_id)?.nomProduit || 'Produit inconnu'}</td>
+                                  <td>{produit.prix.toFixed(2)}</td>
+                                  <td>{produit.quantite}</td>
+                                  <td>
+                                    <button
+                                      type="button"
+                                      className="btn btn-danger btn-sm"
+                                      onClick={() => handleRemoveProduit(index)}
+                                    >
+                                      <i className="bi bi-trash"></i>
+                                    </button>
+                                  </td>
+                                </tr>
+                              ))}
+                            </tbody>
+                          </table>
+                        </div>
+                      )}
+                    </div>
+                    <div className="modal-footer">
+                      <button
+                        type="button"
+                        className="btn btn-secondary"
+                        onClick={() => setShowPopup(false)}
+                      >
+                        Annuler
+                      </button>
+                      <button type="submit" className="btn btn-primary">
+                        Ajouter Commande
+                      </button>
+                    </div>
+                  </form>
                 </div>
               </div>
             </div>
           </div>
-        </div>
-      )}
-    </div>
+        )}
+
+        {showEditPopup && editCommande && (
+          <div
+            className="modal d-block"
+            style={{ backgroundColor: 'rgba(0,0,0,0.5)' }}
+            onClick={() => setShowEditPopup(false)}
+          >
+            <div
+              className="modal-dialog modal-lg"
+              onClick={(e) => e.stopPropagation()}
+            >
+              <div className="modal-content">
+                <div className="modal-header">
+                  <h5 className="modal-title">Modifier la Commande: {editCommande.id}</h5>
+                  <button
+                    type="button"
+                    className="btn-close"
+                    onClick={() => setShowEditPopup(false)}
+                  ></button>
+                </div>
+                <div className="modal-body">
+                  {errorMessage && (
+                    <div className="alert alert-danger" role="alert">
+                      {errorMessage}
+                    </div>
+                  )}
+                  <form onSubmit={handleEditCommande}>
+                    <div className="row">
+                      <div className="col-md-6 mb-3">
+                        <label className="form-label">Client</label>
+                        <select
+                          className="form-control"
+                          name="client_id"
+                          value={editCommande.client_id}
+                          onChange={handleEditCommandeInputChange}
+                          required
+                        >
+                          <option value="">Sélectionner un client</option>
+                          {clients.map(client => (
+                            <option key={client.id} value={client.id}>{client.nom}</option>
+                          ))}
+                        </select>
+                      </div>
+                      <div className="col-md-6 mb-3">
+                        <label className="form-label">Date</label>
+                        <input
+                          type="date"
+                          className="form-control"
+                          name="date"
+                          value={editCommande.date}
+                          onChange={handleEditCommandeInputChange}
+                          required
+                        />
+                      </div>
+                      <div className="col-md-6 mb-3">
+                        <label className="form-label">Statut</label>
+                        <select
+                          className="form-control"
+                          name="status"
+                          value={editCommande.status}
+                          onChange={handleEditCommandeInputChange}
+                          required
+                        >
+                          <option value="En cours">En cours</option>
+                          <option value="Livré">Livré</option>
+                          <option value="Annulé">Annulé</option>
+                        </select>
+                      </div>
+                      <div className="col-md-6 mb-3">
+                        <label className="form-label">Statut de Paiement</label>
+                        <select
+                          className="form-control"
+                          name="payment_status"
+                          value={editCommande.payment_status}
+                          onChange={handleEditCommandeInputChange}
+                          required
+                        >
+                          <option value="En cours">En cours</option>
+                          <option value="Payé">Payé</option>
+                          <option value="Annulé">Annulé</option>
+                        </select>
+                      </div>
+                    </div>
+                    <div className="mt-3">
+                      <h6>Ajouter un Produit</h6>
+                      <div className="row">
+                        <div className="col-md-4 mb-3">
+                          <label className="form-label">Produit</label>
+                          <select
+                            className="form-control"
+                            name="produit_id"
+                            value={newProduit.produit_id}
+                            onChange={handleProduitInputChange}
+                          >
+                            <option value="">Sélectionner un produit</option>
+                            {produits.map(produit => (
+                              <option key={produit.id} value={produit.id}>{produit.nomProduit}</option>
+                            ))}
+                          </select>
+                        </div>
+                        <div className="col-md-3 mb-3">
+                          <label className="form-label">Prix (DH)</label>
+                          <input
+                            type="number"
+                            className="form-control"
+                            name="prix"
+                            value={newProduit.prix}
+                            onChange={handleProduitInputChange}
+                            step="0.01"
+                          />
+                        </div>
+                        <div className="col-md-3 mb-3">
+                          <label className="form-label">Quantité</label>
+                          <input
+                            type="number"
+                            className="form-control"
+                            name="quantite"
+                            value={newProduit.quantite}
+                            onChange={handleProduitInputChange}
+                            min="1"
+                          />
+                        </div>
+                        <div className="col-md-2 mb-3 d-flex align-items-end">
+                          <button
+                            type="button"
+                            className="btn btn-primary w-100"
+                            onClick={() => handleAddProduit(true)}
+                          >
+                            <i className="bi bi-plus-circle"></i>
+                          </button>
+                        </div>
+                      </div>
+                      {editCommande.produits.length > 0 && (
+                        <div className="mt-3">
+                          <h6>Produits Sélectionnés</h6>
+                          <table className="table table-sm">
+                            <thead>
+                              <tr>
+                                <th>Nom</th>
+                                <th>Prix (DH)</th>
+                                <th>Quantité</th>
+                                <th>Action</th>
+                              </tr>
+                            </thead>
+                            <tbody>
+                              {editCommande.produits.map((produit, index) => (
+                                <tr key={index}>
+                                  <td>{produits.find(p => p.id === produit.produit_id)?.nomProduit || 'Produit inconnu'}</td>
+                                  <td>{typeof produit.prix === 'number' ? produit.prix.toFixed(2) : 'N/A'}</td>
+                                  <td>{produit.quantite}</td>
+                                  <td>
+                                    <button
+                                      type="button"
+                                      className="btn btn-danger btn-sm"
+                                      onClick={() => handleRemoveProduit(index, true)}
+                                    >
+                                      <i className="bi bi-trash"></i>
+                                    </button>
+                                  </td>
+                                </tr>
+                              ))}
+                            </tbody>
+                          </table>
+                        </div>
+                      )}
+                    </div>
+                    <div className="modal-footer">
+                      <button
+                        type="button"
+                        className="btn btn-secondary"
+                        onClick={() => setShowEditPopup(false)}
+                      >
+                        Annuler
+                      </button>
+                      <button type="submit" className="btn btn-primary">
+                        Enregistrer
+                      </button>
+                    </div>
+                  </form>
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {showDetailPopup && selectedCommande && (
+          <div
+            className="modal d-block"
+            style={{ backgroundColor: 'rgba(0,0,0,0.5)' }}
+            onClick={() => setShowDetailPopup(false)}
+          >
+            <div
+              className="modal-dialog modal-lg"
+              onClick={(e) => e.stopPropagation()}
+            >
+              <div className="modal-content">
+                <div className="modal-header">
+                  <h5 className="modal-title">Détails de la Commande: {selectedCommande.id}</h5>
+                  <button
+                    type="button"
+                    className="btn-close"
+                    onClick={() => setShowDetailPopup(false)}
+                  ></button>
+                </div>
+                <div className="modal-body">
+                  <p><strong>Client:</strong> {selectedCommande.client}</p>
+                  <p><strong>Créée par:</strong> {selectedCommande.user || 'Unknown'}</p>
+                  <p><strong>Date:</strong> {selectedCommande.date}</p>
+                  <p><strong>Statut:</strong> {selectedCommande.status}</p>
+                  <p><strong>Statut de Paiement:</strong> {selectedCommande.paymentStatus}</p>
+                  <p><strong>Total:</strong> {calculateTotal(selectedCommande.produits)} DH</p>
+                  <h6>Produits</h6>
+                  <table className="table table-sm">
+                    <thead>
+                      <tr>
+                        <th>Nom</th>
+                        <th>Prix (DH)</th>
+                        <th>Quantité</th>
+                        <th>Total (DH)</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {selectedCommande.produits.map((produit, index) => (
+                        <tr key={index}>
+                          <td>{produit.nomProduit}</td>
+                          <td>{produit.prix.toFixed(2)}</td>
+                          <td>{produit.quantite}</td>
+                          <td>{(produit.prix * produit.quantite).toFixed(2)}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                  <div className="modal-footer">
+                    <button
+                      type="button"
+                      className="btn btn-secondary"
+                      onClick={() => setShowDetailPopup(false)}
+                    >
+                      Fermer
+                    </button>
+                    <button
+                      type="button"
+                      className="btn btn-success"
+                      onClick={() => handleDownloadBonCommande(selectedCommande)}
+                    >
+                      Télécharger Bon de Commande
+                    </button>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
+      </div>
+    </Layout>
   );
 };
 

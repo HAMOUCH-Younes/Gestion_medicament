@@ -8,30 +8,31 @@ use App\Http\Controllers\FournisseurController;
 use App\Http\Controllers\ClientController;
 use App\Http\Controllers\CommandeController;
 use App\Http\Controllers\PermissionController;
+use App\Http\Controllers\StatsController;
 
 Route::post('/register', [AuthController::class, 'register']);
 Route::post('/login', [AuthController::class, 'login']);
 Route::middleware('auth:sanctum')->get('/user', [UserController::class, 'me']);
 Route::middleware('auth:sanctum')->post('/logout', [AuthController::class, 'logout']);
 
-Route::get('/produits', [ProduitController::class, 'index']);
+Route::get('/produits', [ProduitController::class, 'index'])->middleware('auth:sanctum');
 Route::post('/produits', [ProduitController::class, 'store'])->middleware('auth:sanctum');
 Route::put('/produits/{id}', [ProduitController::class, 'update'])->middleware('auth:sanctum');
 Route::delete('/produits/{id}', [ProduitController::class, 'destroy'])->middleware('auth:sanctum');
 
 Route::get('/categories', [CategorieController::class, 'index']);
 
-Route::get('/fournisseurs', [FournisseurController::class, 'index']);
+Route::get('/fournisseurs', [FournisseurController::class, 'index'])->middleware('auth:sanctum');
 Route::post('/fournisseurs', [FournisseurController::class, 'store'])->middleware('auth:sanctum');
 Route::put('/fournisseurs/{id}', [FournisseurController::class, 'update'])->middleware('auth:sanctum');
 Route::delete('/fournisseurs/{id}', [FournisseurController::class, 'destroy'])->middleware('auth:sanctum');
 
-Route::get('/clients', [ClientController::class, 'index']);
+Route::get('/clients', [ClientController::class, 'index'])->middleware('auth:sanctum');
 Route::post('/clients', [ClientController::class, 'store'])->middleware('auth:sanctum');
 Route::put('/clients/{id}', [ClientController::class, 'update'])->middleware('auth:sanctum');
 Route::delete('/clients/{id}', [ClientController::class, 'destroy'])->middleware('auth:sanctum');
 
-Route::get('/clients/{clientId}/commandes', [CommandeController::class, 'indexByClient']);
+Route::get('/clients/{clientId}/commandes', [CommandeController::class, 'indexByClient'])->middleware('auth:sanctum');
 
 Route::middleware('auth:sanctum')->group(function () {
     // User Management Routes
@@ -47,4 +48,10 @@ Route::middleware('auth:sanctum')->group(function () {
 
     // Commande Routes
     Route::apiResource('commandes', CommandeController::class);
+
+
+});
+
+Route::middleware('auth:sanctum')->group(function () {
+    Route::get('/stats', [StatsController::class, 'index']);
 });

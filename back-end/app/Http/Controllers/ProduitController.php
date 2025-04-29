@@ -69,15 +69,7 @@ class ProduitController extends Controller
         $produit = Produit::findOrFail($id);
 
         $validator = Validator::make($request->all(), [
-            'nom' => 'required|string|max:255',
-            'categorie_id' => 'nullable|exists:categories,id',
-            'fournisseur_id' => 'nullable|exists:fournisseurs,id',
-            'prix_achat' => 'required|numeric|min:0',
-            'prix_vente' => 'required|numeric|min:0',
-            'stock' => 'required|integer|min:0',
-            'alerte_stock' => 'nullable|integer|min:0',
-            'date_expiration' => 'nullable|date',
-            'image' => 'nullable|image|mimes:jpeg,png,jpg,gif|max:2048',
+            
             'description' => 'nullable|string',
         ]);
 

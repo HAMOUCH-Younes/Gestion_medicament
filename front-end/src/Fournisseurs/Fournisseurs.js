@@ -1,46 +1,38 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import axios from 'axios';
+import jsPDF from 'jspdf';
+import autoTable from 'jspdf-autotable';
+import Layout from '../Layout/Layout';
 
-const Utilisateurs = () => {
+
+const Fournisseurs = () => {
   const [search, setSearch] = useState('');
-  const [utilisateurs, setUtilisateurs] = useState([]);
-  const [currentUser, setCurrentUser] = useState(null);
+  const [fournisseurs, setFournisseurs] = useState([]);
   const [showPopup, setShowPopup] = useState(false);
   const [showEditPopup, setShowEditPopup] = useState(false);
-  const [showPasswordPopup, setShowPasswordPopup] = useState(false);
-  const [newUtilisateur, setNewUtilisateur] = useState({
-    username: '',
+  const [showDetailsPopup, setShowDetailsPopup] = useState(false);
+  const [selectedFournisseur, setSelectedFournisseur] = useState(null);
+  const [newFournisseur, setNewFournisseur] = useState({
+    nom: '',
     email: '',
-    role: 'Utilisateur',
-    password: '',
-    password_confirmation: '',
-    permissions: {
-      dashboard: false,
-      produits: false,
-      clients: false,
-      fournisseurs: false,
-      commandes: false,
-      utilisateurs: false,
-    },
+    telephone: '',
+    adresse: '',
+    nom_societe: '',
   });
-  const [editUtilisateur, setEditUtilisateur] = useState(null);
-  const [passwordChange, setPasswordChange] = useState({
-    utilisateurId: null,
-    new_password: '',
-    new_password_confirmation: '',
-  });
+  const [editFournisseur, setEditFournisseur] = useState(null);
+  const [errors, setErrors] = useState({});
   const [errorMessage, setErrorMessage] = useState('');
+  const [currentUser, setCurrentUser] = useState(null);
   const [loading, setLoading] = useState(true);
 
   const navigate = useNavigate();
-  const apiUrl = 'http://localhost:8000/api'; // Adjust to your Laravel API URL
+  const apiUrl = 'http://localhost:8000/api';
 
   const api = axios.create({
     baseURL: apiUrl,
     headers: {
-      'Authorization': `Bearer ${localStorage.getItem('token')}`,
-      'Content-Type': 'application/json',
+      Authorization: `Bearer ${localStorage.getItem('token')}`,
       'Accept': 'application/json',
     },
   });
@@ -49,23 +41,16 @@ const Utilisateurs = () => {
     const fetchData = async () => {
       setLoading(true);
       try {
-        const [userResponse, usersResponse] = await Promise.all([
+        const [userResponse, fournisseursResponse] = await Promise.all([
           api.get('/user'),
-          api.get('/users'),
+          api.get('/fournisseurs'),
         ]);
-
         setCurrentUser(userResponse.data);
-        setUtilisateurs(usersResponse.data);
-
-        if (!userResponse.data.permissions.utilisateurs && userResponse.data.role !== 'Admin') {
-          navigate('/dashboard');
-          return;
-        }
-
+        setFournisseurs(fournisseursResponse.data);
         setErrorMessage('');
       } catch (error) {
         console.error('Error fetching data:', error.response || error);
-        setErrorMessage('Erreur lors du chargement des données : ' + (error.response?.data?.message || error.message));
+        setErrorMessage('Échec du chargement des données : ' + (error.response?.data?.message || error.message));
         if (error.response?.status === 401) {
           localStorage.removeItem('token');
           navigate('/');
@@ -77,16 +62,13 @@ const Utilisateurs = () => {
     fetchData();
   }, [navigate]);
 
-  const handleLogout = async () => {
-    try {
-      await api.post('/logout');
-      localStorage.removeItem('token');
-      navigate('/');
-    } catch (error) {
-      console.error('Error logging out:', error.response || error);
-      localStorage.removeItem('token');
-      navigate('/');
-    }
+  const navigateTo = (path) => {
+    navigate(`/${path}`);
+  };
+
+  const handleLogout = () => {
+    localStorage.removeItem('token');
+    navigate('/');
   };
 
   const handleSearch = (e) => {
@@ -94,255 +76,275 @@ const Utilisateurs = () => {
   };
 
   const handleInputChange = (e) => {
-    const { name, value, type, checked } = e.target;
-    if (type === 'checkbox') {
-      setNewUtilisateur((prev) => ({
-        ...prev,
-        permissions: {
-          ...prev.permissions,
-          [name]: checked,
-        },
-      }));
-    } else {
-      setNewUtilisateur((prev) => ({
-        ...prev,
-        [name]: value,
-        ...(name === 'role' && value === 'Utilisateur'
-          ? {
-              permissions: {
-                ...prev.permissions,
-                utilisateurs: false,
-              },
-            }
-          : {}),
-      }));
-    }
-    setErrorMessage('');
-  };
-
-  const handleEditInputChange = (e) => {
-    const { name, value, type, checked } = e.target;
-    if (type === 'checkbox') {
-      setEditUtilisateur((prev) => ({
-        ...prev,
-        permissions: {
-          ...prev.permissions,
-          [name]: checked,
-        },
-      }));
-    } else {
-      setEditUtilisateur((prev) => ({
-        ...prev,
-        [name]: value,
-        ...(name === 'role' && value === 'Utilisateur'
-          ? {
-              permissions: {
-                ...prev.permissions,
-                utilisateurs: false,
-              },
-            }
-          : {}),
-      }));
-    }
-    setErrorMessage('');
-  };
-
-  const handlePasswordInputChange = (e) => {
     const { name, value } = e.target;
-    setPasswordChange((prev) => ({
+    setNewFournisseur((prev) => ({
       ...prev,
       [name]: value,
     }));
-    setErrorMessage('');
+    setErrors((prev) => ({ ...prev, [name]: '' }));
   };
 
-  const validatePassword = (password) => {
-    if (!password) return 'Le mot de passe est requis.';
-    if (password.length < 8) return 'Le mot de passe doit contenir au moins 8 caractères.';
-    if (!/[a-z]/.test(password)) return 'Le mot de passe doit contenir au moins une lettre minuscule.';
-    if (!/[A-Z]/.test(password)) return 'Le mot de passe doit contenir au moins une lettre majuscule.';
-    if (!/[0-9]/.test(password)) return 'Le mot de passe doit contenir au moins un chiffre.';
-    if (!/[!@#$%^&*]/.test(password))
-      return 'Le mot de passe doit contenir au moins un caractère spécial (!@#$%^&*).';
-    return '';
+  const handleEditInputChange = (e) => {
+    const { name, value } = e.target;
+    setEditFournisseur((prev) => ({
+      ...prev,
+      [name]: value,
+    }));
+    setErrors((prev) => ({ ...prev, [name]: '' }));
   };
 
-  const handleAddUtilisateur = async (e) => {
+  const validateNewFournisseur = () => {
+    const newErrors = {};
+    if (!newFournisseur.nom.trim()) newErrors.nom = 'Le nom est requis';
+    if (!newFournisseur.email || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(newFournisseur.email))
+      newErrors.email = 'Un email valide est requis';
+    if (!newFournisseur.telephone.trim()) newErrors.telephone = 'Le téléphone est requis';
+    setErrors(newErrors);
+    return Object.keys(newErrors).length === 0;
+  };
+
+  const validateEditFournisseur = () => {
+    const newErrors = {};
+    if (!editFournisseur.nom.trim()) newErrors.nom = 'Le nom est requis';
+    if (!editFournisseur.email || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(editFournisseur.email))
+      newErrors.email = 'Un email valide est requis';
+    if (!editFournisseur.telephone.trim()) newErrors.telephone = 'Le téléphone est requis';
+    setErrors(newErrors);
+    return Object.keys(newErrors).length === 0;
+  };
+
+  const handleAddFournisseur = async (e) => {
     e.preventDefault();
-    if (!newUtilisateur.username || !newUtilisateur.email || !newUtilisateur.role || !newUtilisateur.password) {
-      setErrorMessage('Veuillez remplir tous les champs requis.');
-      return;
-    }
-
-    const passwordError = validatePassword(newUtilisateur.password);
-    if (passwordError) {
-      setErrorMessage(passwordError);
-      return;
-    }
-    if (newUtilisateur.password !== newUtilisateur.password_confirmation) {
-      setErrorMessage('Les mots de passe ne correspondent pas.');
+    if (!validateNewFournisseur()) {
+      setErrorMessage('Veuillez remplir tous les champs requis correctement.');
       return;
     }
 
     try {
-      const response = await api.post('/users', newUtilisateur);
-      setUtilisateurs((prev) => [...prev, response.data]);
-      setNewUtilisateur({
-        username: '',
+      const response = await api.post('/fournisseurs', newFournisseur);
+      setFournisseurs((prev) => [...prev, response.data]);
+      setNewFournisseur({
+        nom: '',
         email: '',
-        role: 'Utilisateur',
-        password: '',
-        password_confirmation: '',
-        permissions: {
-          dashboard: false,
-          produits: false,
-          clients: false,
-          fournisseurs: false,
-          commandes: false,
-          utilisateurs: false,
-        },
+        telephone: '',
+        adresse: '',
+        nom_societe: '',
       });
-      setErrorMessage('');
       setShowPopup(false);
+      setErrors({});
+      setErrorMessage('');
     } catch (error) {
-      console.error('Error adding user:', error.response || error);
+      console.error('Error adding fournisseur:', error.response || error);
+      if (error.response?.status === 401) {
+        navigate('/');
+      }
       if (error.response?.status === 422) {
         const errors = error.response.data.errors;
-        setErrorMessage('Erreurs de validation : ' + Object.values(errors).flat().join(' '));
+        setErrors(errors);
+        const errorMessages = Object.values(errors).flat().join(' ');
+        setErrorMessage(`Échec de l'ajout du fournisseur : ${errorMessages}`);
       } else if (error.response?.status === 403) {
-        setErrorMessage('Non autorisé : Vous n\'avez pas la permission d\'ajouter des utilisateurs.');
-      } else if (error.response?.status === 401) {
-        localStorage.removeItem('token');
-        navigate('/');
+        setErrorMessage('Vous n\'avez pas l\'autorisation d\'ajouter un fournisseur.');
       } else {
-        setErrorMessage('Échec de l\'ajout de l\'utilisateur : ' + (error.response?.data?.message || 'Erreur inconnue'));
+        setErrorMessage('Échec de l\'ajout du fournisseur : ' + (error.response?.data?.message || 'Erreur inconnue'));
       }
     }
   };
 
-  const handleEditUtilisateur = async (e) => {
+  const handleEditFournisseur = async (e) => {
     e.preventDefault();
-    if (!editUtilisateur.username || !editUtilisateur.email || !editUtilisateur.role) {
-      setErrorMessage('Veuillez remplir tous les champs requis.');
+    if (!validateEditFournisseur()) {
+      setErrorMessage('Veuillez remplir tous les champs requis correctement.');
       return;
     }
 
     try {
-      const response = await api.put(`/users/${editUtilisateur.id}`, editUtilisateur);
-      setUtilisateurs((prev) =>
-        prev.map((user) => (user.id === editUtilisateur.id ? response.data : user))
+      const response = await api.put(`/fournisseurs/${editFournisseur.id}`, editFournisseur);
+      setFournisseurs((prev) =>
+        prev.map((fournisseur) =>
+          fournisseur.id === editFournisseur.id ? response.data : fournisseur
+        )
       );
-      setEditUtilisateur(null);
+      setEditFournisseur(null);
       setShowEditPopup(false);
+      setErrors({});
       setErrorMessage('');
     } catch (error) {
-      console.error('Error updating user:', error.response || error);
+      console.error('Error updating fournisseur:', error.response || error);
+      if (error.response?.status === 401) {
+        navigate('/');
+      }
       if (error.response?.status === 422) {
         const errors = error.response.data.errors;
-        setErrorMessage('Erreurs de validation : ' + Object.values(errors).flat().join(' '));
+        setErrors(errors);
+        const errorMessages = Object.values(errors).flat().join(' ');
+        setErrorMessage(`Échec de la mise à jour du fournisseur : ${errorMessages}`);
       } else if (error.response?.status === 403) {
-        setErrorMessage('Non autorisé : Vous n\'avez pas la permission de modifier des utilisateurs.');
-      } else if (error.response?.status === 401) {
-        localStorage.removeItem('token');
-        navigate('/');
+        setErrorMessage('Vous n\'avez pas l\'autorisation de modifier ce fournisseur.');
       } else {
-        setErrorMessage('Échec de la mise à jour de l\'utilisateur : ' + (error.response?.data?.message || 'Erreur inconnue'));
+        setErrorMessage('Échec de la mise à jour du fournisseur : ' + (error.response?.data?.message || 'Erreur inconnue'));
       }
     }
   };
 
-  const handleChangePassword = async (e) => {
-    e.preventDefault();
-    const { utilisateurId, new_password, new_password_confirmation } = passwordChange;
-
-    if (!new_password || !new_password_confirmation) {
-      setErrorMessage('Les deux champs sont requis.');
-      return;
-    }
-    if (new_password !== new_password_confirmation) {
-      setErrorMessage('Les mots de passe ne correspondent pas.');
-      return;
-    }
-    const passwordError = validatePassword(new_password);
-    if (passwordError) {
-      setErrorMessage(passwordError);
-      return;
-    }
-
-    try {
-      await api.post(`/users/${utilisateurId}/password`, {
-        new_password,
-        new_password_confirmation,
-      });
-      setPasswordChange({
-        utilisateurId: null,
-        new_password: '',
-        new_password_confirmation: '',
-      });
-      setErrorMessage('');
-      setShowPasswordPopup(false);
-      alert('Mot de passe mis à jour avec succès !');
-    } catch (error) {
-      console.error('Error changing password:', error.response || error);
-      if (error.response?.status === 422) {
-        const errors = error.response.data.errors;
-        setErrorMessage('Erreurs de validation : ' + Object.values(errors).flat().join(' '));
-      } else if (error.response?.status === 403) {
-        setErrorMessage('Non autorisé : Vous n\'avez pas la permission de modifier les mots de passe.');
-      } else if (error.response?.status === 401) {
-        localStorage.removeItem('token');
-        navigate('/');
-      } else {
-        setErrorMessage('Échec de la mise à jour du mot de passe : ' + (error.response?.data?.message || 'Erreur inconnue'));
-      }
-    }
-  };
-
-  const handleEditClick = (utilisateur) => {
-    setEditUtilisateur({ ...utilisateur });
+  const handleEditClick = (e, fournisseur) => {
+    e.stopPropagation();
+    setEditFournisseur({ ...fournisseur });
+    setErrors({});
     setShowEditPopup(true);
   };
 
-  const handlePasswordClick = (utilisateurId) => {
-    setPasswordChange({
-      utilisateurId,
-      new_password: '',
-      new_password_confirmation: '',
-    });
-    setShowPasswordPopup(true);
+  const handleDetailsClick = (fournisseur) => {
+    setSelectedFournisseur(fournisseur);
+    setShowDetailsPopup(true);
   };
 
-  const handleDeleteClick = async (utilisateurId) => {
-    if (window.confirm('Êtes-vous sûr de vouloir supprimer cet utilisateur ?')) {
-      try {
-        await api.delete(`/users/${utilisateurId}`);
-        setUtilisateurs((prev) => prev.filter((user) => user.id !== utilisateurId));
-        setErrorMessage('');
-      } catch (error) {
-        console.error('Error deleting user:', error.response || error);
-        if (error.response?.status === 403) {
-          setErrorMessage('Non autorisé : Vous n\'avez pas la permission de supprimer des utilisateurs.');
-        } else if (error.response?.status === 401) {
-          localStorage.removeItem('token');
-          navigate('/');
-        } else {
-          setErrorMessage('Échec de la suppression de l\'utilisateur : ' + (error.response?.data?.message || 'Erreur inconnue'));
-        }
+  const handleDeleteClick = async (e, fournisseurId) => {
+    e.stopPropagation();
+    if (!window.confirm('Êtes-vous sûr de vouloir supprimer ce fournisseur ?')) {
+      return;
+    }
+
+    try {
+      await api.delete(`/fournisseurs/${fournisseurId}`);
+      setFournisseurs((prev) => prev.filter((fournisseur) => fournisseur.id !== fournisseurId));
+      setShowDetailsPopup(false);
+      setSelectedFournisseur(null);
+      setErrorMessage('');
+    } catch (error) {
+      console.error('Error deleting fournisseur:', error.response || error);
+      if (error.response?.status === 401) {
+        navigate('/');
+      } else if (error.response?.status === 403) {
+        setErrorMessage('Vous n\'avez pas l\'autorisation de supprimer ce fournisseur.');
+      } else if (error.response?.status === 400) {
+        setErrorMessage('Impossible de supprimer : ce fournisseur est associé à des produits.');
+      } else {
+        setErrorMessage('Échec de la suppression du fournisseur : ' + (error.response?.data?.message || 'Erreur inconnue'));
       }
     }
   };
 
-  const filteredUtilisateurs = utilisateurs.filter((utilisateur) =>
-    utilisateur.username.toLowerCase().includes(search.toLowerCase())
+  const handleDownloadPDF = () => {
+    const doc = new jsPDF();
+    doc.setFontSize(18);
+    doc.text('Liste des Fournisseurs', 14, 22);
+    const columns = [
+      { header: 'ID', dataKey: 'id' },
+      { header: 'Nom', dataKey: 'nom' },
+      { header: 'Email', dataKey: 'email' },
+      { header: 'Téléphone', dataKey: 'telephone' },
+      { header: 'Adresse', dataKey: 'adresse' },
+      { header: 'Société', dataKey: 'nom_societe' },
+    ];
+    const rows = fournisseurs.map((fournisseur) => ({
+      id: fournisseur.id,
+      nom: fournisseur.nom,
+      email: fournisseur.email,
+      telephone: fournisseur.telephone,
+      adresse: fournisseur.adresse || 'Non spécifiée',
+      nom_societe: fournisseur.nom_societe || 'Non spécifiée',
+    }));
+    autoTable(doc, {
+      columns,
+      body: rows,
+      startY: 30,
+      theme: 'striped',
+      headStyles: { fillColor: [44, 44, 84] },
+      styles: { fontSize: 10 },
+    });
+    doc.save('fournisseurs.pdf');
+  };
+
+  const handleDownloadFournisseurPDF = (fournisseur) => {
+    const doc = new jsPDF();
+    const pageWidth = doc.internal.pageSize.width;
+    const pageHeight = doc.internal.pageSize.height;
+    const margin = 15;
+    let yPosition = margin;
+
+    const addHeader = () => {
+      doc.setFontSize(10);
+      doc.setFont('helvetica', 'italic');
+      doc.text('[Company Logo]', margin, yPosition);
+      yPosition += 10;
+      doc.setFontSize(12);
+      doc.setFont('helvetica', 'bold');
+      doc.text('Zakaria Medicament', margin, yPosition);
+      yPosition += 6;
+      doc.setFont('helvetica', 'normal');
+      doc.setFontSize(10);
+      doc.text('123 Business Street, Tiznit, Morocco', margin, yPosition);
+      yPosition += 5;
+      doc.text('Phone: +212 682-106782 | Email: contact@gmail.com', margin, yPosition);
+      yPosition += 10;
+      doc.setFontSize(16);
+      doc.setFont('helvetica', 'bold');
+      doc.text('Détails du Fournisseur', pageWidth / 2, yPosition, { align: 'center' });
+      yPosition += 10;
+      doc.setLineWidth(0.5);
+      doc.setDrawColor(100, 100, 100);
+      doc.line(margin, yPosition, pageWidth - margin, yPosition);
+      yPosition += 10;
+    };
+
+    const addFooter = () => {
+      doc.setFontSize(8);
+      doc.setFont('helvetica', 'italic');
+      doc.setTextColor(150, 150, 150);
+      doc.text(
+        'Generated by Zakaria Medicament | All rights reserved',
+        pageWidth / 2,
+        pageHeight - 10,
+        { align: 'center' }
+      );
+      doc.setTextColor(0, 0, 0);
+    };
+
+    addHeader();
+    addFooter();
+
+    doc.setFontSize(12);
+    doc.setFont('helvetica', 'bold');
+    doc.text('Informations du Fournisseur', margin, yPosition);
+    yPosition += 8;
+    doc.setFontSize(10);
+    doc.setFont('helvetica', 'normal');
+    doc.text(`ID: ${fournisseur.id}`, margin, yPosition);
+    yPosition += 6;
+    doc.text(`Nom: ${fournisseur.nom}`, margin, yPosition);
+    yPosition += 6;
+    doc.text(`Email: ${fournisseur.email}`, margin, yPosition);
+    yPosition += 6;
+    doc.text(`Téléphone: ${fournisseur.telephone}`, margin, yPosition);
+    yPosition += 6;
+    doc.text(`Adresse: ${fournisseur.adresse || 'Non spécifiée'}`, margin, yPosition);
+    yPosition += 6;
+    doc.text(`Nom de la Société: ${fournisseur.nom_societe || 'Non spécifiée'}`, margin, yPosition);
+    yPosition += 10;
+
+    doc.setFontSize(10);
+    doc.setFont('helvetica', 'italic');
+    doc.setTextColor(100, 100, 100);
+    doc.text('Thank you for your partnership!', pageWidth / 2, yPosition, { align: 'center' });
+    doc.setTextColor(0, 0, 0);
+
+    doc.save(`Fournisseur_${fournisseur.id}_${fournisseur.nom}.pdf`);
+  };
+
+  const filteredFournisseurs = fournisseurs.filter((fournisseur) =>
+    fournisseur.nom.toLowerCase().includes(search.toLowerCase())
   );
 
   if (loading) {
     return (
-      <div className="d-flex justify-content-center align-items-center vh-100">
-        <div className="spinner-border text-primary" role="status">
-          <span className="visually-hidden">Chargement...</span>
+      <Layout>
+        <div className="d-flex justify-content-center align-items-center vh-100">
+          <div className="spinner-border text-primary" role="status">
+            <span className="visually-hidden">Chargement...</span>
+          </div>
         </div>
-      </div>
+      </Layout>
     );
   }
 
@@ -351,762 +353,410 @@ const Utilisateurs = () => {
   }
 
   return (
-    <div className="container-fluid">
-      {errorMessage && (
-        <div className="alert alert-danger" role="alert">
-          {errorMessage}
-        </div>
-      )}
-      <div className="row">
-        {/* Sidebar Navigation */}
-        <div
-          className="col-md-3 col-lg-2 d-md-flex bg-dark text-white flex-column vh-100 p-0"
-          style={{
-            background: 'linear-gradient(180deg, #2c2c54 0%, #1b263b 100%)',
-            boxShadow: '3px 0 10px rgba(0,0,0,0.2)',
-          }}
-        >
-          <div
-            className="p-3 border-bottom"
-            style={{
-              borderColor: 'rgba(255,255,255,0.1) !important',
-              background: 'rgba(0,0,0,0.2)',
-            }}
-          >
-            <h4 className="text-white mb-0 d-flex align-items-center">
-              <i className="bi bi-grid me-2"></i> Menu Principal
-            </h4>
+    <Layout currentUser={currentUser} navigateTo={navigateTo} handleLogout={handleLogout}>
+      <div className="container-fluid p-4">
+        {errorMessage && (
+          <div className="alert alert-danger" role="alert">
+            {errorMessage}
           </div>
-          <nav className="nav flex-column flex-grow-1 p-2">
-            {currentUser.permissions.dashboard && (
-              <button
-                className="nav-link text-white text-start btn btn-link p-2 mb-1 rounded"
-                onClick={() => navigate('/dashboard')}
-                style={{ transition: 'all 0.3s ease', borderRadius: '8px' }}
-                onMouseEnter={(e) => {
-                  e.currentTarget.style.background = 'rgba(255,255,255,0.1)';
-                  e.currentTarget.style.transform = 'translateX(4px)';
-                }}
-                onMouseLeave={(e) => {
-                  e.currentTarget.style.background = 'transparent';
-                  e.currentTarget.style.transform = 'translateX(0)';
-                }}
-              >
-                <i className="bi bi-speedometer2 me-2"></i> Tableau de Bord
-              </button>
-            )}
-            {currentUser.permissions.produits && (
-              <button
-                className="nav-link text-white text-start btn btn-link p-2 mb-1 rounded"
-                onClick={() => navigate('/produits')}
-                style={{ transition: 'all 0.3s ease', borderRadius: '8px' }}
-                onMouseEnter={(e) => {
-                  e.currentTarget.style.background = 'rgba(255,255,255,0.1)';
-                  e.currentTarget.style.transform = 'translateX(4px)';
-                }}
-                onMouseLeave={(e) => {
-                  e.currentTarget.style.background = 'transparent';
-                  e.currentTarget.style.transform = 'translateX(0)';
-                }}
-              >
-                <i className="bi bi-box-seam me-2"></i> Produits
-              </button>
-            )}
-            {currentUser.permissions.clients && (
-              <button
-                className="nav-link text-white text-start btn btn-link p-2 mb-1 rounded"
-                onClick={() => navigate('/clients')}
-                style={{ transition: 'all 0.3s ease', borderRadius: '8px' }}
-                onMouseEnter={(e) => {
-                  e.currentTarget.style.background = 'rgba(255,255,255,0.1)';
-                  e.currentTarget.style.transform = 'translateX(4px)';
-                }}
-                onMouseLeave={(e) => {
-                  e.currentTarget.style.background = 'transparent';
-                  e.currentTarget.style.transform = 'translateX(0)';
-                }}
-              >
-                <i className="bi bi-people me-2"></i> Clients
-              </button>
-            )}
-            {currentUser.permissions.fournisseurs && (
-              <button
-                className="nav-link text-white text-start btn btn-link p-2 mb-1 rounded"
-                onClick={() => navigate('/fournisseurs')}
-                style={{ transition: 'all 0.3s ease', borderRadius: '8px' }}
-                onMouseEnter={(e) => {
-                  e.currentTarget.style.background = 'rgba(255,255,255,0.1)';
-                  e.currentTarget.style.transform = 'translateX(4px)';
-                }}
-                onMouseLeave={(e) => {
-                  e.currentTarget.style.background = 'transparent';
-                  e.currentTarget.style.transform = 'translateX(0)';
-                }}
-              >
-                <i className="bi bi-truck me-2"></i> Fournisseurs
-              </button>
-            )}
-            {currentUser.permissions.commandes && (
-              <button
-                className="nav-link text-white text-start btn btn-link p-2 mb-1 rounded"
-                onClick={() => navigate('/commandes')}
-                style={{ transition: 'all 0.3s ease', borderRadius: '8px' }}
-                onMouseEnter={(e) => {
-                  e.currentTarget.style.background = 'rgba(255,255,255,0.1)';
-                  e.currentTarget.style.transform = 'translateX(4px)';
-                }}
-                onMouseLeave={(e) => {
-                  e.currentTarget.style.background = 'transparent';
-                  e.currentTarget.style.transform = 'translateX(0)';
-                }}
-              >
-                <i className="bi bi-cart me-2"></i> Commandes
-              </button>
-            )}
-            {currentUser.permissions.utilisateurs && (
-              <button
-                className="nav-link text-white text-start btn btn-link p-2 mb-1 rounded"
-                onClick={() => navigate('/utilisateurs')}
-                style={{ transition: 'all 0.3s ease', borderRadius: '8px' }}
-                onMouseEnter={(e) => {
-                  e.currentTarget.style.background = 'rgba(255,255,255,0.1)';
-                  e.currentTarget.style.transform = 'translateX(4px)';
-                }}
-                onMouseLeave={(e) => {
-                  e.currentTarget.style.background = 'transparent';
-                  e.currentTarget.style.transform = 'translateX(0)';
-                }}
-              >
-                <i className="bi bi-person-gear me-2"></i> Utilisateurs
-              </button>
-            )}
-          </nav>
-          <div
-            className="p-3 border-top mt-auto"
-            style={{ borderColor: 'rgba(255,255,255,0.1) !important' }}
-          >
+        )}
+        <div className="d-flex justify-content-between align-items-center mb-4">
+          <h1>Fournisseurs</h1>
+          <div>
             <button
-              onClick={handleLogout}
-              className="btn btn-outline-light w-100"
-              style={{
-                transition: 'all 0.3s ease',
-                background: 'linear-gradient(45deg, #dc3545, #c82333)',
-                border: 'none',
-                color: 'white',
-              }}
-              onMouseEnter={(e) => {
-                e.currentTarget.style.transform = 'scale(1.02)';
-                e.currentTarget.style.opacity = '0.9';
-              }}
-              onMouseLeave={(e) => {
-                e.currentTarget.style.transform = 'scale(1)';
-                e.currentTarget.style.opacity = '1';
-              }}
+              className="btn btn-primary me-2"
+              onClick={() => setShowPopup(true)}
             >
-              <i className="bi bi-box-arrow-left me-2"></i> Déconnexion
+              <i className="bi bi-plus-circle me-2"></i>Ajouter Fournisseur
+            </button>
+            <button
+              className="btn btn-success"
+              onClick={handleDownloadPDF}
+              disabled={fournisseurs.length === 0}
+            >
+              <i className="bi bi-file-earmark-pdf me-2"></i>Télécharger PDF
             </button>
           </div>
         </div>
 
-        {/* Main Content */}
-        <div className="col-md-9 col-lg-10 p-4">
-          <div className="d-flex justify-content-between align-items-center mb-4">
-            <h1>Utilisateurs</h1>
-            {(currentUser.role === 'Admin' || currentUser.permissions.utilisateurs) && (
-              <button className="btn btn-primary" onClick={() => setShowPopup(true)}>
-                <i className="bi bi-plus-circle me-2"></i>Ajouter Utilisateur
-              </button>
-            )}
-          </div>
-          <div className="card border-0 shadow-sm">
-            <div className="card-body">
-              <div className="d-flex justify-content-end mb-3">
-                <input
-                  type="text"
-                  className="form-control"
-                  style={{ maxWidth: '300px' }}
-                  placeholder="Rechercher un utilisateur..."
-                  value={search}
-                  onChange={handleSearch}
-                />
-              </div>
-              <div className="table-responsive" style={{ maxHeight: '500px', overflowY: 'auto' }}>
-                <table className="table table-hover align-middle">
-                  <thead className="table-dark">
-                    <tr>
-                      <th>ID</th>
-                      <th>Nom d'utilisateur</th>
-                      <th>Email</th>
-                      <th>Rôle</th>
-                      <th style={{ minWidth: '340px' }}>Actions</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {filteredUtilisateurs.length > 0 ? (
-                      filteredUtilisateurs.map((utilisateur) => (
-                        <tr key={utilisateur.id}>
-                          <td>{utilisateur.id}</td>
-                          <td>{utilisateur.username}</td>
-                          <td>{utilisateur.email}</td>
-                          <td>{utilisateur.role}</td>
-                          <td>
-                            {(currentUser.role === 'Admin' || currentUser.permissions.utilisateurs) && (
-                              <>
-                                <button
-                                  className="btn btn-primary me-2"
-                                  style={{
-                                    backgroundColor: '#007bff',
-                                    borderColor: '#007bff',
-                                    padding: '6px 12px',
-                                    fontSize: '14px',
-                                    minWidth: '80px',
-                                  }}
-                                  onClick={() => handleEditClick(utilisateur)}
-                                  title="Éditer"
-                                >
-                                  <i className="bi bi-pencil me-1"></i> Éditer
-                                </button>
-                                <button
-                                  className="btn btn-success me-2"
-                                  style={{
-                                    backgroundColor: '#28a745',
-                                    borderColor: '#28a745',
-                                    padding: '6px 12px',
-                                    fontSize: '14px',
-                                    minWidth: '80px',
-                                  }}
-                                  onClick={() => handlePasswordClick(utilisateur.id)}
-                                  title="Changer le mot de passe"
-                                >
-                                  <i className="bi bi-key me-1"></i> Mot de Passe
-                                </button>
-                                <button
-                                  className="btn btn-danger"
-                                  style={{
-                                    backgroundColor: '#dc3545',
-                                    borderColor: '#dc3545',
-                                    padding: '6px 12px',
-                                    fontSize: '14px',
-                                    minWidth: '80px',
-                                  }}
-                                  onClick={() => handleDeleteClick(utilisateur.id)}
-                                  title="Supprimer"
-                                  disabled={utilisateur.id === currentUser.id}
-                                >
-                                  <i className="bi bi-trash me-1"></i> Supprimer
-                                </button>
-                              </>
-                            )}
-                          </td>
-                        </tr>
-                      ))
-                    ) : (
-                      <tr>
-                        <td colSpan="5" className="text-center">
-                          Aucun utilisateur trouvé
+        <div className="card border-0 shadow-sm">
+          <div className="card-body">
+            <div className="d-flex justify-content-end mb-3">
+              <input
+                type="text"
+                className="form-control"
+                style={{ maxWidth: '300px' }}
+                placeholder="Rechercher un fournisseur..."
+                value={search}
+                onChange={handleSearch}
+              />
+            </div>
+            <div className="table-responsive" style={{ maxHeight: '500px', overflowY: 'auto' }}>
+              <table className="table table-hover align-middle">
+                <thead className="table-dark">
+                  <tr>
+                    <th>ID</th>
+                    <th>Nom</th>
+                    <th>Email</th>
+                    <th>Téléphone</th>
+                    <th style={{ minWidth: '220px' }}>Actions</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {filteredFournisseurs.length > 0 ? (
+                    filteredFournisseurs.map((fournisseur) => (
+                      <tr
+                        key={fournisseur.id}
+                        onClick={() => handleDetailsClick(fournisseur)}
+                        style={{ cursor: 'pointer' }}
+                      >
+                        <td>{fournisseur.id}</td>
+                        <td>{fournisseur.nom}</td>
+                        <td>{fournisseur.email}</td>
+                        <td>{fournisseur.telephone}</td>
+                        <td onClick={(e) => e.stopPropagation()}>
+                          <button
+                            className="btn btn-primary me-2"
+                            style={{
+                              backgroundColor: '#007bff',
+                              borderColor: '#007bff',
+                              padding: '6px 12px',
+                              fontSize: '14px',
+                              minWidth: '80px',
+                            }}
+                            onClick={(e) => handleEditClick(e, fournisseur)}
+                            title="Éditer"
+                          >
+                            <i className="bi bi-pencil me-1"></i> Éditer
+                          </button>
+                          <button
+                            className="btn btn-danger"
+                            style={{
+                              backgroundColor: '#dc3545',
+                              borderColor: '#dc3545',
+                              padding: '6px 12px',
+                              fontSize: '14px',
+                              minWidth: '80px',
+                            }}
+                            onClick={(e) => handleDeleteClick(e, fournisseur.id)}
+                            title="Supprimer"
+                          >
+                            <i className="bi bi-trash me-1"></i> Supprimer
+                          </button>
                         </td>
                       </tr>
-                    )}
-                  </tbody>
-                </table>
-              </div>
+                    ))
+                  ) : (
+                    <tr>
+                      <td colSpan="5" className="text-center">
+                        Aucun fournisseur trouvé
+                      </td>
+                    </tr>
+                  )}
+                </tbody>
+              </table>
             </div>
           </div>
         </div>
+
+        {/* Add Fournisseur Popup Modal */}
+        {showPopup && (
+          <div
+            className="modal d-block"
+            style={{ backgroundColor: 'rgba(0,0,0,0.5)' }}
+            onClick={() => setShowPopup(false)}
+          >
+            <div
+              className="modal-dialog modal-lg"
+              onClick={(e) => e.stopPropagation()}
+            >
+              <div className="modal-content">
+                <div className="modal-header">
+                  <h5 className="modal-title">Ajouter un Nouveau Fournisseur</h5>
+                  <button
+                    type="button"
+                    className="btn-close"
+                    onClick={() => {
+                      setShowPopup(false);
+                      setErrors({});
+                      setNewFournisseur({
+                        nom: '',
+                        email: '',
+                        telephone: '',
+                        adresse: '',
+                        nom_societe: '',
+                      });
+                    }}
+                  ></button>
+                </div>
+                <div className="modal-body">
+                  {errorMessage && (
+                    <div className="alert alert-danger" role="alert">
+                      {errorMessage}
+                    </div>
+                  )}
+                  <form onSubmit={handleAddFournisseur}>
+                    <div className="row">
+                      <div className="col-md-6 mb-3">
+                        <label className="form-label">Nom</label>
+                        <input
+                          type="text"
+                          className={`form-control ${errors.nom ? 'is-invalid' : ''}`}
+                          name="nom"
+                          value={newFournisseur.nom}
+                          onChange={handleInputChange}
+                          required
+                        />
+                        {errors.nom && <div className="invalid-feedback">{errors.nom}</div>}
+                      </div>
+                      <div className="col-md-6 mb-3">
+                        <label className="form-label">Email</label>
+                        <input
+                          type="email"
+                          className={`form-control ${errors.email ? 'is-invalid' : ''}`}
+                          name="email"
+                          value={newFournisseur.email}
+                          onChange={handleInputChange}
+                          required
+                        />
+                        {errors.email && <div className="invalid-feedback">{errors.email}</div>}
+                      </div>
+                      <div className="col-md-6 mb-3">
+                        <label className="form-label">Téléphone</label>
+                        <input
+                          type="tel"
+                          className={`form-control ${errors.telephone ? 'is-invalid' : ''}`}
+                          name="telephone"
+                          value={newFournisseur.telephone}
+                          onChange={handleInputChange}
+                          required
+                        />
+                        {errors.telephone && <div className="invalid-feedback">{errors.telephone}</div>}
+                      </div>
+                      <div className="col-md-6 mb-3">
+                        <label className="form-label">Adresse</label>
+                        <input
+                          type="text"
+                          className="form-control"
+                          name="adresse"
+                          value={newFournisseur.adresse}
+                          onChange={handleInputChange}
+                        />
+                      </div>
+                      <div className="col-md-6 mb-3">
+                        <label className="form-label">Nom de la Société</label>
+                        <input
+                          type="text"
+                          className="form-control"
+                          name="nom_societe"
+                          value={newFournisseur.nom_societe}
+                          onChange={handleInputChange}
+                        />
+                      </div>
+                    </div>
+                    <div className="d-flex justify-content-end">
+                      <button
+                        type="button"
+                        className="btn btn-secondary me-2"
+                        onClick={() => {
+                          setShowPopup(false);
+                          setErrors({});
+                        }}
+                      >
+                        Annuler
+                      </button>
+                      <button
+                        type="submit"
+                        className="btn btn-primary"
+                        disabled={!newFournisseur.nom || !newFournisseur.email || !newFournisseur.telephone}
+                      >
+                        Ajouter
+                      </button>
+                    </div>
+                  </form>
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Edit Fournisseur Popup Modal */}
+        {showEditPopup && editFournisseur && (
+          <div
+            className="modal d-block"
+            style={{ backgroundColor: 'rgba(0,0,0,0.5)' }}
+            onClick={() => setShowEditPopup(false)}
+          >
+            <div
+              className="modal-dialog modal-lg"
+              onClick={(e) => e.stopPropagation()}
+            >
+              <div className="modal-content">
+                <div className="modal-header">
+                  <h5 className="modal-title">Modifier le Fournisseur: {editFournisseur.nom}</h5>
+                  <button
+                    type="button"
+                    className="btn-close"
+                    onClick={() => {
+                      setShowEditPopup(false);
+                      setErrors({});
+                    }}
+                  ></button>
+                </div>
+                <div className="modal-body">
+                  {errorMessage && (
+                    <div className="alert alert-danger" role="alert">
+                      {errorMessage}
+                    </div>
+                  )}
+                  <form onSubmit={handleEditFournisseur}>
+                    <div className="row">
+                      <div className="col-md-6 mb-3">
+                        <label className="form-label">Nom</label>
+                        <input
+                          type="text"
+                          className={`form-control ${errors.nom ? 'is-invalid' : ''}`}
+                          name="nom"
+                          value={editFournisseur.nom}
+                          onChange={handleEditInputChange}
+                          required
+                        />
+                        {errors.nom && <div className="invalid-feedback">{errors.nom}</div>}
+                      </div>
+                      <div className="col-md-6 mb-3">
+                        <label className="form-label">Email</label>
+                        <input
+                          type="email"
+                          className={`form-control ${errors.email ? 'is-invalid' : ''}`}
+                          name="email"
+                          value={editFournisseur.email}
+                          onChange={handleEditInputChange}
+                          required
+                        />
+                        {errors.email && <div className="invalid-feedback">{errors.email}</div>}
+                      </div>
+                      <div className="col-md-6 mb-3">
+                        <label className="form-label">Téléphone</label>
+                        <input
+                          type="tel"
+                          className={`form-control ${errors.telephone ? 'is-invalid' : ''}`}
+                          name="telephone"
+                          value={editFournisseur.telephone}
+                          onChange={handleEditInputChange}
+                          required
+                        />
+                        {errors.telephone && <div className="invalid-feedback">{errors.telephone}</div>}
+                      </div>
+                      <div className="col-md-6 mb-3">
+                        <label className="form-label">Adresse</label>
+                        <input
+                          type="text"
+                          className="form-control"
+                          name="adresse"
+                          value={editFournisseur.adresse}
+                          onChange={handleEditInputChange}
+                        />
+                      </div>
+                      <div className="col-md-6 mb-3">
+                        <label className="form-label">Nom de la Société</label>
+                        <input
+                          type="text"
+                          className="form-control"
+                          name="nom_societe"
+                          value={editFournisseur.nom_societe}
+                          onChange={handleEditInputChange}
+                        />
+                      </div>
+                    </div>
+                    <div className="d-flex justify-content-end">
+                      <button
+                        type="button"
+                        className="btn btn-secondary me-2"
+                        onClick={() => {
+                          setShowEditPopup(false);
+                          setErrors({});
+                        }}
+                      >
+                        Annuler
+                      </button>
+                      <button
+                        type="submit"
+                        className="btn btn-primary"
+                        disabled={!editFournisseur.nom || !editFournisseur.email || !editFournisseur.telephone}
+                      >
+                        Enregistrer
+                      </button>
+                    </div>
+                  </form>
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Details Fournisseur Popup Modal */}
+        {showDetailsPopup && selectedFournisseur && (
+          <div
+            className="modal d-block"
+            style={{ backgroundColor: 'rgba(0,0,0,0.5)' }}
+            onClick={() => setShowDetailsPopup(false)}
+          >
+            <div
+              className="modal-dialog modal-md"
+              onClick={(e) => e.stopPropagation()}
+            >
+              <div className="modal-content">
+                <div className="modal-header">
+                  <h5 className="modal-title">Détails du Fournisseur: {selectedFournisseur.nom}</h5>
+                  <button
+                    type="button"
+                    className="btn-close"
+                    onClick={() => setShowDetailsPopup(false)}
+                  ></button>
+                </div>
+                <div className="modal-body">
+                  <div className="mb-3">
+                    <strong>ID:</strong> {selectedFournisseur.id}
+                  </div>
+                  <div className="mb-3">
+                    <strong>Nom:</strong> {selectedFournisseur.nom}
+                  </div>
+                  <div className="mb-3">
+                    <strong>Email:</strong> {selectedFournisseur.email}
+                  </div>
+                  <div className="mb-3">
+                    <strong>Téléphone:</strong> {selectedFournisseur.telephone}
+                  </div>
+                  <div className="mb-3">
+                    <strong>Adresse:</strong> {selectedFournisseur.adresse || 'Non spécifiée'}
+                  </div>
+                  <div className="mb-3">
+                    <strong>Nom de la Société:</strong> {selectedFournisseur.nom_societe || 'Non spécifiée'}
+                  </div>
+                </div>
+                <div className="modal-footer">
+                  <button
+                    type="button"
+                    className="btn btn-success me-2"
+                    onClick={() => handleDownloadFournisseurPDF(selectedFournisseur)}
+                  >
+                    <i className="bi bi-download me-2"></i>Télécharger les informations
+                  </button>
+                  <button
+                    type="button"
+                    className="btn btn-secondary"
+                    onClick={() => setShowDetailsPopup(false)}
+                  >
+                    Fermer
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
       </div>
-
-      {/* Add Utilisateur Popup Modal */}
-      {showPopup && (
-        <div
-          className="modal d-block"
-          style={{ backgroundColor: 'rgba(0,0,0,0.5)' }}
-          onClick={() => setShowPopup(false)}
-        >
-          <div className="modal-dialog modal-lg" onClick={(e) => e.stopPropagation()}>
-            <div className="modal-content">
-              <div className="modal-header">
-                <h5 className="modal-title">Ajouter un Nouvel Utilisateur</h5>
-                <button
-                  type="button"
-                  className="btn-close"
-                  onClick={() => {
-                    setShowPopup(false);
-                    setErrorMessage('');
-                    setNewUtilisateur({
-                      username: '',
-                      email: '',
-                      role: 'Utilisateur',
-                      password: '',
-                      password_confirmation: '',
-                      permissions: {
-                        dashboard: false,
-                        produits: false,
-                        clients: false,
-                        fournisseurs: false,
-                        commandes: false,
-                        utilisateurs: false,
-                      },
-                    });
-                  }}
-                ></button>
-              </div>
-              <div className="modal-body">
-                {errorMessage && (
-                  <div className="alert alert-danger" role="alert">
-                    {errorMessage}
-                  </div>
-                )}
-                <form onSubmit={handleAddUtilisateur}>
-                  <div className="row">
-                    <div className="col-md-6 mb-3">
-                      <label className="form-label">Nom d'utilisateur</label>
-                      <input
-                        type="text"
-                        className="form-control"
-                        name="username"
-                        value={newUtilisateur.username}
-                        onChange={handleInputChange}
-                        required
-                      />
-                    </div>
-                    <div className="col-md-6 mb-3">
-                      <label className="form-label">Email</label>
-                      <input
-                        type="email"
-                        className="form-control"
-                        name="email"
-                        value={newUtilisateur.email}
-                        onChange={handleInputChange}
-                        required
-                      />
-                    </div>
-                    <div className="col-md-6 mb-3">
-                      <label className="form-label">Rôle</label>
-                      <select
-                        className="form-control"
-                        name="role"
-                        value={newUtilisateur.role}
-                        onChange={handleInputChange}
-                        required
-                      >
-                        <option value="Utilisateur">Utilisateur</option>
-                        <option value="Administrateur">Administrateur</option>
-                      </select>
-                    </div>
-                    <div className="col-md-6 mb-3">
-                      <label className="form-label">Mot de passe</label>
-                      <input
-                        type="password"
-                        className="form-control"
-                        name="password"
-                        value={newUtilisateur.password}
-                        onChange={handleInputChange}
-                        required
-                      />
-                    </div>
-                    <div className="col-md-6 mb-3">
-                      <label className="form-label">Confirmer le Mot de passe</label>
-                      <input
-                        type="password"
-                        className="form-control"
-                        name="password_confirmation"
-                        value={newUtilisateur.password_confirmation}
-                        onChange={handleInputChange}
-                        required
-                      />
-                    </div>
-                    <div className="col-md-12 mb-3">
-                      <label className="form-label">Permissions</label>
-                      <div className="row">
-                        <div className="col-md-6">
-                          <div className="form-check">
-                            <input
-                              type="checkbox"
-                              className="form-check-input"
-                              name="dashboard"
-                              checked={newUtilisateur.permissions.dashboard}
-                              onChange={handleInputChange}
-                              id="dashboard"
-                            />
-                            <label className="form-check-label" htmlFor="dashboard">
-                              Accès au Tableau de Bord
-                            </label>
-                          </div>
-                          <div className="form-check">
-                            <input
-                              type="checkbox"
-                              className="form-check-input"
-                              name="produits"
-                              checked={newUtilisateur.permissions.produits}
-                              onChange={handleInputChange}
-                              id="produits"
-                            />
-                            <label className="form-check-label" htmlFor="produits">
-                              Accès aux Produits
-                            </label>
-                          </div>
-                          <div className="form-check">
-                            <input
-                              type="checkbox"
-                              className="form-check-input"
-                              name="clients"
-                              checked={newUtilisateur.permissions.clients}
-                              onChange={handleInputChange}
-                              id="clients"
-                            />
-                            <label className="form-check-label" htmlFor="clients">
-                              Accès aux Clients
-                            </label>
-                          </div>
-                        </div>
-                        <div className="col-md-6">
-                          <div className="form-check">
-                            <input
-                              type="checkbox"
-                              className="form-check-input"
-                              name="fournisseurs"
-                              checked={newUtilisateur.permissions.fournisseurs}
-                              onChange={handleInputChange}
-                              id="fournisseurs"
-                            />
-                            <label className="form-check-label" htmlFor="fournisseurs">
-                              Accès aux Fournisseurs
-                            </label>
-                          </div>
-                          <div className="form-check">
-                            <input
-                              type="checkbox"
-                              className="form-check-input"
-                              name="commandes"
-                              checked={newUtilisateur.permissions.commandes}
-                              onChange={handleInputChange}
-                              id="commandes"
-                            />
-                            <label className="form-check-label" htmlFor="commandes">
-                              Accès aux Commandes
-                            </label>
-                          </div>
-                          <div className="form-check">
-                            <input
-                              type="checkbox"
-                              className="form-check-input"
-                              name="utilisateurs"
-                              checked={newUtilisateur.permissions.utilisateurs}
-                              onChange={handleInputChange}
-                              id="utilisateurs"
-                              disabled={newUtilisateur.role === 'Utilisateur'}
-                            />
-                            <label className="form-check-label" htmlFor="utilisateurs">
-                              Accès aux Utilisateurs
-                            </label>
-                          </div>
-                        </div>
-                      </div>
-                    </div>
-                  </div>
-                  <div className="d-flex justify-content-end">
-                    <button
-                      type="button"
-                      className="btn btn-secondary me-2"
-                      onClick={() => {
-                        setShowPopup(false);
-                        setErrorMessage('');
-                        setNewUtilisateur({
-                          username: '',
-                          email: '',
-                          role: 'Utilisateur',
-                          password: '',
-                          password_confirmation: '',
-                          permissions: {
-                            dashboard: false,
-                            produits: false,
-                            clients: false,
-                            fournisseurs: false,
-                            commandes: false,
-                            utilisateurs: false,
-                          },
-                        });
-                      }}
-                    >
-                      Annuler
-                    </button>
-                    <button type="submit" className="btn btn-primary">
-                      Ajouter
-                    </button>
-                  </div>
-                </form>
-              </div>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* Edit Utilisateur Popup Modal */}
-      {showEditPopup && editUtilisateur && (
-        <div
-          className="modal d-block"
-          style={{ backgroundColor: 'rgba(0,0,0,0.5)' }}
-          onClick={() => setShowEditPopup(false)}
-        >
-          <div className="modal-dialog modal-lg" onClick={(e) => e.stopPropagation()}>
-            <div className="modal-content">
-              <div className="modal-header">
-                <h5 className="modal-title">Modifier l'Utilisateur: {editUtilisateur.username}</h5>
-                <button
-                  type="button"
-                  className="btn-close"
-                  onClick={() => {
-                    setShowEditPopup(false);
-                    setErrorMessage('');
-                  }}
-                ></button>
-              </div>
-              <div className="modal-body">
-                {errorMessage && (
-                  <div className="alert alert-danger" role="alert">
-                    {errorMessage}
-                  </div>
-                )}
-                <form onSubmit={handleEditUtilisateur}>
-                  <div className="row">
-                    <div className="col-md-6 mb-3">
-                      <label className="form-label">Nom d'utilisateur</label>
-                      <input
-                        type="text"
-                        className="form-control"
-                        name="username"
-                        value={editUtilisateur.username}
-                        onChange={handleEditInputChange}
-                        required
-                      />
-                    </div>
-                    <div className="col-md-6 mb-3">
-                      <label className="form-label">Email</label>
-                      <input
-                        type="email"
-                        className="form-control"
-                        name="email"
-                        value={editUtilisateur.email}
-                        onChange={handleEditInputChange}
-                        required
-                      />
-                    </div>
-                    <div className="col-md-6 mb-3">
-                      <label className="form-label">Rôle</label>
-                      <select
-                        className="form-control"
-                        name="role"
-                        value={editUtilisateur.role}
-                        onChange={handleEditInputChange}
-                        required
-                      >
-                        <option value="Utilisateur">Utilisateur</option>
-                        <option value="Administrateur">Administrateur</option>
-                      </select>
-                    </div>
-                    <div className="col-md-12 mb-3">
-                      <label className="form-label">Permissions</label>
-                      <div className="row">
-                        <div className="col-md-6">
-                          <div className="form-check">
-                            <input
-                              type="checkbox"
-                              className="form-check-input"
-                              name="dashboard"
-                              checked={editUtilisateur.permissions.dashboard}
-                              onChange={handleEditInputChange}
-                              id="editDashboard"
-                            />
-                            <label className="form-check-label" htmlFor="editDashboard">
-                              Accès au Tableau de Bord
-                            </label>
-                          </div>
-                          <div className="form-check">
-                            <input
-                              type="checkbox"
-                              className="form-check-input"
-                              name="produits"
-                              checked={editUtilisateur.permissions.produits}
-                              onChange={handleEditInputChange}
-                              id="editProduits"
-                            />
-                            <label className="form-check-label" htmlFor="editProduits">
-                              Accès aux Produits
-                            </label>
-                          </div>
-                          <div className="form-check">
-                            <input
-                              type="checkbox"
-                              className="form-check-input"
-                              name="clients"
-                              checked={editUtilisateur.permissions.clients}
-                              onChange={handleEditInputChange}
-                              id="editClients"
-                            />
-                            <label className="form-check-label" htmlFor="editClients">
-                              Accès aux Clients
-                            </label>
-                          </div>
-                        </div>
-                        <div className="col-md-6">
-                          <div className="form-check">
-                            <input
-                              type="checkbox"
-                              className="form-check-input"
-                              name="fournisseurs"
-                              checked={editUtilisateur.permissions.fournisseurs}
-                              onChange={handleEditInputChange}
-                              id="editFournisseurs"
-                            />
-                            <label className="form-check-label" htmlFor="editFournisseurs">
-                              Accès aux Fournisseurs
-                            </label>
-                          </div>
-                          <div className="form-check">
-                            <input
-                              type="checkbox"
-                              className="form-check-input"
-                              name="commandes"
-                              checked={editUtilisateur.permissions.commandes}
-                              onChange={handleEditInputChange}
-                              id="editCommandes"
-                            />
-                            <label className="form-check-label" htmlFor="editCommandes">
-                              Accès aux Commandes
-                            </label>
-                          </div>
-                          <div className="form-check">
-                            <input
-                              type="checkbox"
-                              className="form-check-input"
-                              name="utilisateurs"
-                              checked={editUtilisateur.permissions.utilisateurs}
-                              onChange={handleEditInputChange}
-                              id="editUtilisateurs"
-                              disabled={editUtilisateur.role === 'Utilisateur'}
-                            />
-                            <label className="form-check-label" htmlFor="editUtilisateurs">
-                              Accès aux Utilisateurs
-                            </label>
-                          </div>
-                        </div>
-                      </div>
-                    </div>
-                  </div>
-                  <div className="d-flex justify-content-end">
-                    <button
-                      type="button"
-                      className="btn btn-secondary me-2"
-                      onClick={() => {
-                        setShowEditPopup(false);
-                        setErrorMessage('');
-                      }}
-                    >
-                      Annuler
-                    </button>
-                    <button type="submit" className="btn btn-primary">
-                      Enregistrer
-                    </button>
-                  </div>
-                </form>
-              </div>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* Change Password Popup Modal */}
-      {showPasswordPopup && passwordChange.utilisateurId && (
-        <div
-          className="modal d-block"
-          style={{ backgroundColor: 'rgba(0,0,0,0.5)' }}
-          onClick={() => setShowPasswordPopup(false)}
-        >
-          <div className="modal-dialog modal-md" onClick={(e) => e.stopPropagation()}>
-            <div className="modal-content">
-              <div className="modal-header">
-                <h5 className="modal-title">
-                  Changer le Mot de Passe:{' '}
-                  {utilisateurs.find((u) => u.id === passwordChange.utilisateurId)?.username}
-                </h5>
-                <button
-                  type="button"
-                  className="btn-close"
-                  onClick={() => {
-                    setShowPasswordPopup(false);
-                    setErrorMessage('');
-                    setPasswordChange({
-                      utilisateurId: null,
-                      new_password: '',
-                      new_password_confirmation: '',
-                    });
-                  }}
-                ></button>
-              </div>
-              <div className="modal-body">
-                {errorMessage && (
-                  <div className="alert alert-danger" role="alert">
-                    {errorMessage}
-                  </div>
-                )}
-                <form onSubmit={handleChangePassword}>
-                  <div className="mb-3">
-                    <label className="form-label">Nouveau Mot de Passe</label>
-                    <input
-                      type="password"
-                      className={`form-control ${errorMessage ? 'is-invalid' : ''}`}
-                      name="new_password"
-                      value={passwordChange.new_password}
-                      onChange={handlePasswordInputChange}
-                      required
-                      placeholder="Entrez le nouveau mot de passe"
-                    />
-                  </div>
-                  <div className="mb-3">
-                    <label className="form-label">Confirmer le Mot de Passe</label>
-                    <input
-                      type="password"
-                      className={`form-control ${errorMessage ? 'is-invalid' : ''}`}
-                      name="new_password_confirmation"
-                      value={passwordChange.new_password_confirmation}
-                      onChange={handlePasswordInputChange}
-                      required
-                      placeholder="Confirmez le mot de passe"
-                    />
-                    {errorMessage && <div className="invalid-feedback">{errorMessage}</div>}
-                  </div>
-                  <div className="d-flex justify-content-end">
-                    <button
-                      type="button"
-                      className="btn btn-secondary me-2"
-                      onClick={() => {
-                        setShowPasswordPopup(false);
-                        setErrorMessage('');
-                        setPasswordChange({
-                          utilisateurId: null,
-                          new_password: '',
-                          new_password_confirmation: '',
-                        });
-                      }}
-                    >
-                      Annuler
-                    </button>
-                    <button
-                      type="submit"
-                      className="btn btn-primary"
-                      disabled={!passwordChange.new_password || !passwordChange.new_password_confirmation}
-                    >
-                      Enregistrer
-                    </button>
-                  </div>
-                </form>
-              </div>
-            </div>
-          </div>
-        </div>
-      )}
-    </div>
+    </Layout>
   );
 };
 
-export default Utilisateurs;
+export default Fournisseurs;

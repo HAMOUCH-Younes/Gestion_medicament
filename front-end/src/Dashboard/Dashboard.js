@@ -1,21 +1,64 @@
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
+import axios from 'axios';
 import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
+import { Bar } from 'react-chartjs-2';
+import { Chart as ChartJS, CategoryScale, LinearScale, BarElement, Title, Tooltip, Legend } from 'chart.js';
+import Layout from '../Layout/Layout';
+
+ChartJS.register(CategoryScale, LinearScale, BarElement, Title, Tooltip, Legend);
 
 const Dashboard = () => {
+  const [produits, setProduits] = useState([]);
+  const [stats, setStats] = useState(null);
+  const [currentUser, setCurrentUser] = useState(null);
+  const [loading, setLoading] = useState(true);
+  const [errorMessage, setErrorMessage] = useState('');
   const navigate = useNavigate();
+  const apiUrl = 'http://localhost:8000/api';
 
-  // Sample produits data from Produits component
-  const produits = [
-    { id: 1, nom: 'Produit A', categorie: 'Électronique', prixAchat: 199.99, prixVente: 299.99, stock: 50, alerteStock: 10, dateExpiration: '2025-12-31', image: null, description: 'Description du produit A' },
-    { id: 2, nom: 'Produit B', categorie: 'Vêtements', prixAchat: 29.99, prixVente: 49.99, stock: 5, alerteStock: 20, dateExpiration: '2025-04-30', image: null, description: 'Description du produit B' },
-  ];
+  const api = axios.create({
+    baseURL: apiUrl,
+    headers: {
+      Authorization: `Bearer ${localStorage.getItem('token')}`,
+      Accept: 'application/json',
+    },
+  });
 
-  // Filter low stock products
-  const lowStockProduits = produits.filter(produit => produit.stock <= produit.alerteStock);
+  useEffect(() => {
+    const fetchData = async () => {
+      setLoading(true);
+      try {
+        const [userResponse, produitsResponse, statsResponse] = await Promise.all([
+          api.get('/user'),
+          api.get('/produits'),
+          api.get('/stats'),
+        ]);
+        setCurrentUser(userResponse.data);
+        if (!userResponse.data.permissions?.dashboard) {
+          navigate('/');
+          return;
+        }
+        setProduits(produitsResponse.data);
+        setStats(statsResponse.data);
+        setErrorMessage('');
+      } catch (error) {
+        console.error('Error fetching data:', error.response || error);
+        setErrorMessage('Échec du chargement des données. Veuillez réessayer.');
+        if (error.response?.status === 401) {
+          localStorage.removeItem('token');
+          navigate('/');
+        }
+      } finally {
+        setLoading(false);
+      }
+    };
+    fetchData();
+  }, [navigate]);
 
   const handleLogout = () => {
+    localStorage.removeItem('token');
     navigate('/');
   };
 
@@ -23,50 +66,68 @@ const Dashboard = () => {
     navigate(`/${path}`);
   };
 
+  const retryFetch = async () => {
+    setErrorMessage('');
+    setLoading(true);
+    try {
+      const [userResponse, produitsResponse, statsResponse] = await Promise.all([
+        api.get('/user'),
+        api.get('/produits'),
+        api.get('/stats'),
+      ]);
+      setCurrentUser(userResponse.data);
+      if (!userResponse.data.permissions?.dashboard) {
+        navigate('/');
+        return;
+      }
+      setProduits(produitsResponse.data);
+      setStats(statsResponse.data);
+      setErrorMessage('');
+    } catch (error) {
+      console.error('Retry failed:', error.response || error);
+      setErrorMessage('Échec du rechargement. Veuillez vérifier votre connexion.');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const lowStockProduits = produits.filter(produit => produit.stock <= produit.alerteStock);
+
   const handleDownloadStats = () => {
     const doc = new jsPDF();
+    const primaryColor = [44, 44, 84];
+    const textColor = [33, 37, 41];
 
-    // Define colors and fonts
-    const primaryColor = [44, 44, 84]; // Dark blue for header
-    const secondaryColor = [100, 100, 100]; // Gray for accents
-    const textColor = [33, 37, 41]; // Dark gray for text
-
-    // Add a header
     doc.setFillColor(...primaryColor);
-    doc.rect(0, 0, 210, 40, 'F'); // Header background
+    doc.rect(0, 0, 210, 40, 'F');
     doc.setFont('helvetica', 'bold');
     doc.setFontSize(20);
     doc.setTextColor(255, 255, 255);
     doc.text('Rapport de Statistiques', 20, 25);
 
-    // Add logo (placeholder - replace with actual logo image)
-    // doc.addImage(logoImage, 'PNG', 160, 10, 30, 20); // Uncomment and provide logoImage
-
-    // Add subtitle and generation date
     doc.setFont('helvetica', 'normal');
     doc.setFontSize(12);
     doc.setTextColor(...textColor);
     doc.text(`Généré le: ${new Date().toLocaleDateString('fr-FR')}`, 20, 35);
 
-    // Define statistics data
-    const stats = [
-      { category: 'Produits en Stock', value: '1245 unités', date: new Date().toISOString().split('T')[0] },
-      { category: 'Ventes Totales', value: '56,890 DH', date: new Date().toISOString().split('T')[0] },
-      { category: 'Ruptures de Stock', value: '12 produits', date: new Date().toISOString().split('T')[0] },
-      { category: 'Clients Actifs', value: '320', date: new Date().toISOString().split('T')[0] },
-      { category: 'Commandes en Cours', value: '45', date: new Date().toISOString().split('T')[0] },
-    ];
+    const statsData = stats ? [
+      { category: 'Produits en Stock', value: `${stats.totalStock} unités` },
+      { category: 'Ventes Totales', value: `${stats.totalSales.toFixed(2)} DH` },
+      { category: 'Ruptures de Stock', value: `${stats.lowStock} produits` },
+      { category: 'Clients Actifs', value: stats.activeClients },
+      { category: 'Commandes en Cours', value: stats.pendingOrders },
+      { category: 'Disponibilité Stock', value: `${stats.stockAvailability.toFixed(2)}%` },
+    ] : [];
 
-    // Add table with enhanced styling
     autoTable(doc, {
       startY: 50,
-      head: [['Catégorie', 'Valeur', 'Date']],
-      body: stats.map((row) => [row.category, row.value, row.date]),
+      head: [['Catégorie', 'Valeur']],
+      body: statsData.map(row => [row.category, row.value]),
       theme: 'grid',
       styles: {
         font: 'helvetica',
         fontSize: 10,
-        textColor: textColor,
+        textColor,
         cellPadding: 4,
       },
       headStyles: {
@@ -76,12 +137,11 @@ const Dashboard = () => {
         fontStyle: 'bold',
       },
       alternateRowStyles: {
-        fillColor: [245, 245, 245], // Light gray for alternate rows
+        fillColor: [245, 245, 245],
       },
       margin: { top: 50 },
     });
 
-    // Add a summary section
     const finalY = doc.lastAutoTable.finalY + 20;
     doc.setFontSize(14);
     doc.setFont('helvetica', 'bold');
@@ -90,411 +150,412 @@ const Dashboard = () => {
     doc.setFont('helvetica', 'normal');
     doc.text(
       [
-        'Ce rapport présente un aperçu des performances actuelles du tableau de bord.',
-        'Les données incluent le stock, les ventes, et les alertes de rupture.',
+        'Ce rapport présente un aperçu des performances actuelles.',
+        'Inclut stock, ventes, et alertes de rupture.',
         'Contactez l\'administrateur pour plus de détails.',
       ],
       20,
       finalY + 10
     );
 
-    // Add footer with page numbers
     const pageCount = doc.internal.getNumberOfPages();
     for (let i = 1; i <= pageCount; i++) {
       doc.setPage(i);
       doc.setFontSize(8);
-      doc.setTextColor(...secondaryColor);
-      doc.text(
-        `Page ${i} sur ${pageCount} | Généré par Zakaria Médicament`,
-        20,
-        doc.internal.pageSize.height - 10
-      );
+      doc.setTextColor(100, 100, 100);
+      doc.text(`Page ${i} sur ${pageCount} | Zakaria Médicament`, 20, doc.internal.pageSize.height - 10);
     }
 
-    // Save the PDF
     doc.save(`dashboard-stats-${new Date().toISOString().split('T')[0]}.pdf`);
   };
 
-  return (
-    <div className="container-fluid">
-      {/* Inline CSS for animations */}
-      <style>
-        {`
-          @keyframes slideIn {
-            from {
-              transform: translateY(50px);
-              opacity: 0;
-            }
-            to {
-              transform: translateY(0);
-              opacity: 1;
-            }
-          }
-          .card-animate {
-            animation: slideIn 0.5s ease-out forwards;
-          }
-          .dashboard-cards .card-animate:nth-child(1) { animation-delay: 0.1s; }
-          .dashboard-cards .card-animate:nth-child(2) { animation-delay: 0.2s; }
-          .dashboard-cards .card-animate:nth-child(3) { animation-delay: 0.3s; }
-          .activity-stock-cards .card-animate:nth-child(1) { animation-delay: 0.4s; }
-          .activity-stock-cards .card-animate:nth-child(2) { animation-delay: 0.5s; }
-          @media (prefers-reduced-motion: reduce) {
-            .card-animate {
-              animation: none;
-            }
-          }
-        `}
-      </style>
-      <div className="row">
-        {/* Sidebar Navigation */}
-        <div
-          className="col-md-3 col-lg-2 d-md-flex bg-dark text-white flex-column vh-100 p-0"
-          style={{
-            background: 'linear-gradient(180deg, #2c2c54 0%, #1b263b 100%)',
-            boxShadow: '3px 0 10px rgba(0,0,0,0.2)',
-          }}
-        >
-          <div
-            className="p-3 border-bottom"
-            style={{
-              borderColor: 'rgba(255,255,255,0.1) !important',
-              background: 'rgba(0,0,0,0.2)',
-            }}
-          >
-            <h4 className="text-white mb-0 d-flex align-items-center">
-              <i className="bi thal bi-grid me-2"></i> Menu Principal
-            </h4>
-          </div>
-          <nav className="nav flex-column flex-grow-1 p-2">
-            <button
-              className="nav-link text-white text-start btn btn-link p-2 mb-1 rounded"
-              onClick={() => navigateTo('dashboard')}
-              style={{ transition: 'all 0.3s ease', borderRadius: '8px' }}
-              onMouseEnter={(e) => {
-                e.currentTarget.style.background = 'rgba(255,255,255,0.1)';
-                e.currentTarget.style.transform = 'translateX(4px)';
-              }}
-              onMouseLeave={(e) => {
-                e.currentTarget.style.background = 'transparent';
-                e.currentTarget.style.transform = 'translateX(0)';
-              }}
-            >
-              <i className="bi bi-speedometer2 me-2"></i> Tableau de Bord
-            </button>
-            <button
-              className="nav-link text-white text-start btn btn-link p-2 mb-1 rounded"
-              onClick={() => navigateTo('produits')}
-              style={{ transition: 'all 0.3s ease', borderRadius: '8px' }}
-              onMouseEnter={(e) => {
-                e.currentTarget.style.background = 'rgba(255,255,255,0.1)';
-                e.currentTarget.style.transform = 'translateX(4px)';
-              }}
-              onMouseLeave={(e) => {
-                e.currentTarget.style.background = 'transparent';
-                e.currentTarget.style.transform = 'translateX(0)';
-              }}
-            >
-              <i className="bi bi-box-seam me-2"></i> Produits
-            </button>
-            <button
-              className="nav-link text-white text-start btn btn-link p-2 mb-1 rounded"
-              onClick={() => navigateTo('clients')}
-              style={{ transition: 'all 0.3s ease', borderRadius: '8px' }}
-              onMouseEnter={(e) => {
-                e.currentTarget.style.background = 'rgba(255,255,255,0.1)';
-                e.currentTarget.style.transform = 'translateX(4px)';
-              }}
-              onMouseLeave={(e) => {
-                e.currentTarget.style.background = 'transparent';
-                e.currentTarget.style.transform = 'translateX(0)';
-              }}
-            >
-              <i className="bi bi-people me-2"></i> Clients
-            </button>
-            <button
-              className="nav-link text-white text-start btn btn-link p-2 mb-1 rounded"
-              onClick={() => navigateTo('fournisseurs')}
-              style={{ transition: 'all 0.3s ease', borderRadius: '8px' }}
-              onMouseEnter={(e) => {
-                e.currentTarget.style.background = 'rgba(255,255,255,0.1)';
-                e.currentTarget.style.transform = 'translateX(4px)';
-              }}
-              onMouseLeave={(e) => {
-                e.currentTarget.style.background = 'transparent';
-                e.currentTarget.style.transform = 'translateX(0)';
-              }}
-            >
-              <i className="bi bi-truck me-2"></i> Fournisseurs
-            </button>
-            <button
-              className="nav-link text-white text-start btn btn-link p-2 mb-1 rounded"
-              onClick={() => navigateTo('commandes')}
-              style={{ transition: 'all 0.3s ease', borderRadius: '8px' }}
-              onMouseEnter={(e) => {
-                e.currentTarget.style.background = 'rgba(255,255,255,0.1)';
-                e.currentTarget.style.transform = 'translateX(4px)';
-              }}
-              onMouseLeave={(e) => {
-                e.currentTarget.style.background = 'transparent';
-                e.currentTarget.style.transform = 'translateX(0)';
-              }}
-            >
-              <i className="bi bi-cart me-2"></i> Commandes
-            </button>
-            <button
-              className="nav-link text-white text-start btn btn-link p-2 mb-1 rounded"
-              onClick={() => navigateTo('utilisateurs')}
-              style={{ transition: 'all 0.3s ease', borderRadius: '8px' }}
-              onMouseEnter={(e) => {
-                e.currentTarget.style.background = 'rgba(255,255,255,0.1)';
-                e.currentTarget.style.transform = 'translateX(4px)';
-              }}
-              onMouseLeave={(e) => {
-                e.currentTarget.style.background = 'transparent';
-                e.currentTarget.style.transform = 'translateX(0)';
-              }}
-            >
-              <i className="bi bi-person-gear me-2"></i> Utilisateurs
-            </button>
-          </nav>
-          <div
-            className="p-3 border-top mt-auto"
-            style={{ borderColor: 'rgba(255,255,255,0.1) !important' }}
-          >
-            <button
-              onClick={handleLogout}
-              className="btn btn-outline-light w-100"
-              style={{
-                transition: 'all 0.3s ease',
-                background: 'linear-gradient(45deg, #dc3545, #c82333)',
-                border: 'none',
-                color: 'white',
-              }}
-              onMouseEnter={(e) => {
-                e.currentTarget.style.transform = 'scale(1.02)';
-                e.currentTarget.style.opacity = '0.9';
-              }}
-              onMouseLeave={(e) => {
-                e.currentTarget.style.transform = 'scale(1)';
-                e.currentTarget.style.opacity = '1';
-              }}
-            >
-              <i className="bi bi-box-arrow-left me-2"></i> Déconnexion
-            </button>
-          </div>
-        </div>
+  const chartData = {
+    labels: ['Stock', 'Ventes (x1000)', 'Ruptures', 'Clients', 'Commandes'],
+    datasets: [
+      {
+        label: 'Statistiques',
+        data: stats
+          ? [stats.totalStock, stats.totalSales / 1000, stats.lowStock, stats.activeClients, stats.pendingOrders]
+          : [0, 0, 0, 0, 0],
+        backgroundColor: [
+          'rgba(13, 110, 253, 0.7)',
+          'rgba(25, 135, 84, 0.7)',
+          'rgba(255, 193, 7, 0.7)',
+          'rgba(111, 66, 193, 0.7)',
+          'rgba(214, 51, 132, 0.7)'
+        ],
+        borderColor: [
+          'rgba(13, 110, 253, 1)',
+          'rgba(25, 135, 84, 1)',
+          'rgba(255, 193, 7, 1)',
+          'rgba(111, 66, 193, 1)',
+          'rgba(214, 51, 132, 1)'
+        ],
+        borderWidth: 1,
+      },
+    ],
+  };
 
-        {/* Main Content Area with Animated Cards */}
+  const chartOptions = {
+    responsive: true,
+    plugins: {
+      legend: { display: false },
+      title: { 
+        display: true, 
+        text: 'Aperçu des Statistiques', 
+        font: { 
+          size: 16,
+          weight: 'bold'
+        },
+        padding: {
+          top: 10,
+          bottom: 20
+        }
+      },
+      tooltip: {
+        backgroundColor: 'rgba(0, 0, 0, 0.8)',
+        titleFont: {
+          size: 14,
+          weight: 'bold'
+        },
+        bodyFont: {
+          size: 12
+        },
+        padding: 10,
+        cornerRadius: 5
+      }
+    },
+    scales: {
+      y: { 
+        beginAtZero: true, 
+        title: { 
+          display: true, 
+          text: 'Valeur', 
+          font: {
+            weight: 'bold'
+          }
+        },
+        grid: {
+          color: 'rgba(0, 0, 0, 0.05)'
+        }
+      },
+      x: { 
+        title: { 
+          display: true, 
+          text: 'Catégorie',
+          font: {
+            weight: 'bold'
+          } 
+        },
+        grid: {
+          display: false
+        }
+      },
+    },
+    maintainAspectRatio: false
+  };
+
+  if (loading) {
+    return (
+      <Layout>
         <main className="col-md-9 col-lg-10 ms-sm-auto px-md-4 py-4">
-          <div className="d-flex justify-content-between align-items-center mb-4">
-            <h1>Tableau de Bord</h1>
-            <div className="d-flex align-items-center">
-              <button
-                onClick={handleDownloadStats}
-                className="btn btn-primary me-3"
-                style={{
-                  transition: 'all 0.3s ease',
-                }}
-                onMouseEnter={(e) => {
-                  e.currentTarget.style.transform = 'scale(1.05)';
-                }}
-                onMouseLeave={(e) => {
-                  e.currentTarget.style.transform = 'scale(1)';
-                }}
-              >
-                <i className="bi bi-download me-2"></i> Télécharger Statistiques
-              </button>
-              <div className="d-none d-md-block">
-                <span className="text-muted">Bienvenue, Administrateur</span>
+          <div className="d-flex justify-content-center align-items-center" style={{ height: '80vh' }}>
+            <div className="text-center">
+              <div className="spinner-border text-primary" style={{ width: '3rem', height: '3rem' }} role="status">
+                <span className="visually-hidden">Chargement...</span>
               </div>
-            </div>
-          </div>
-
-          {/* Dashboard Cards with Animation */}
-          <div className="row g-4 dashboard-cards">
-            <div className="col-md-4">
-              <div
-                className="card h-100 border-0 shadow-sm card-animate"
-                style={{
-                  transition: 'all 0.3s ease',
-                }}
-                onMouseEnter={(e) => {
-                  e.currentTarget.style.transform = 'translateY(-10px) scale(1.03)';
-                  e.currentTarget.style.boxShadow = '0 10px 20px rgba(0,0,0,0.2)';
-                }}
-                onMouseLeave={(e) => {
-                  e.currentTarget.style.transform = 'translateY(0) scale(1)';
-                  e.currentTarget.style.boxShadow = '0 4px 10px rgba(0,0,0,0.1)';
-                }}
-              >
-                <div className="card-body">
-                  <div className="d-flex align-items-center">
-                    <div className="bg-primary bg-opacity-10 p-3 rounded me-3">
-                      <i className="bi bi-box-seam text-primary fs-4"></i>
-                    </div>
-                    <div>
-                      <h5 className="card-title mb-1">Produits</h5>
-                      <p className="text-muted mb-0">1245 en stock</p>
-                    </div>
-                  </div>
-                </div>
-              </div>
-            </div>
-
-            <div className="col-md-4">
-              <div
-                className="card h-100 border-0 shadow-sm card-animate"
-                style={{
-                  transition: 'all 0.3s ease',
-                }}
-                onMouseEnter={(e) => {
-                  e.currentTarget.style.transform = 'translateY(-10px) scale(1.03)';
-                  e.currentTarget.style.boxShadow = '0 10px 20px rgba(0,0,0,0.2)';
-                }}
-                onMouseLeave={(e) => {
-                  e.currentTarget.style.transform = 'translateY(0) scale(1)';
-                  e.currentTarget.style.boxShadow = '0 4px 10px rgba(0,0,0,0.1)';
-                }}
-              >
-                <div className="card-body">
-                  <div className="d-flex align-items-center">
-                    <div className="bg-success bg-opacity-10 p-3 rounded me-3">
-                      <i className="bi bi-currency-dollar text-success fs-4"></i>
-                    </div>
-                    <div>
-                      <h5 className="card-title mb-1">Ventes</h5>
-                      <p className="text-muted mb-0">56,890 DH</p>
-                    </div>
-                  </div>
-                </div>
-              </div>
-            </div>
-
-            <div className="col-md-4">
-              <div
-                className="card h-100 border-0 shadow-sm card-animate"
-                style={{
-                  transition: 'all 0.3s ease',
-                }}
-                onMouseEnter={(e) => {
-                  e.currentTarget.style.transform = 'translateY(-10px) scale(1.03)';
-                  e.currentTarget.style.boxShadow = '0 10px 20px rgba(0,0,0,0.2)';
-                }}
-                onMouseLeave={(e) => {
-                  e.currentTarget.style.transform = 'translateY(0) scale(1)';
-                  e.currentTarget.style.boxShadow = '0 4px 10px rgba(0,0,0,0.1)';
-                }}
-              >
-                <div className="card-body">
-                  <div className="d-flex align-items-center">
-                    <div className="bg-warning bg-opacity-10 p-3 rounded me-3">
-                      <i className="bi bi-exclamation-triangle text-warning fs-4"></i>
-                    </div>
-                    <div>
-                      <h5 className="card-title mb-1">Ruptures</h5>
-                      <p className="text-muted mb-0">12 produits</p>
-                    </div>
-                  </div>
-                </div>
-              </div>
-            </div>
-          </div>
-
-          {/* Product Alerts and Stock Status with Animation */}
-          <div className="row mt-4 g-4 activity-stock-cards">
-            <div className="col-lg-8">
-              <div
-                className="card border-0 shadow-sm card-animate"
-                style={{
-                  transition: 'all 0.3s ease',
-                }}
-                onMouseEnter={(e) => {
-                  e.currentTarget.style.transform = 'translateY(-10px) scale(1.03)';
-                  e.currentTarget.style.boxShadow = '0 10px 20px rgba(0,0,0,0.2)';
-                }}
-                onMouseLeave={(e) => {
-                  e.currentTarget.style.transform = 'translateY(0) scale(1)';
-                  e.currentTarget.style.boxShadow = '0 4px 10px rgba(0,0,0,0.1)';
-                }}
-              >
-                <div className="card-header bg-white">
-                  <h5 className="mb-0">Alertes Produits</h5>
-                </div>
-                <div className="card-body">
-                  <div className="list-group list-group-flush">
-                    {lowStockProduits.length === 0 ? (
-                      <div className="list-group-item border-0 px-0 py-3">
-                        <p className="text-muted mb-0">Aucune alerte pour le moment.</p>
-                      </div>
-                    ) : (
-                      lowStockProduits.map((produit, index) => (
-                        <div key={`low-${produit.id}`} className="list-group-item border-0 px-0 py-3">
-                          <div className="d-flex align-items-center">
-                            <div className="bg-light rounded p-2 me-3">
-                              <i className="bi bi-exclamation-triangle text-danger"></i>
-                            </div>
-                            <div className="flex-grow-1">
-                              <div className="d-flex justify-content-between">
-                                <h6 className="mb-1">Stock faible</h6>
-                                <small className="text-muted">Aujourd'hui</small>
-                              </div>
-                              <p className="mb-0 text-muted">{produit.nom} - Stock: {produit.stock} (Seuil: {produit.alerteStock})</p>
-                            </div>
-                          </div>
-                        </div>
-                      ))
-                    )}
-                  </div>
-                </div>
-              </div>
-            </div>
-
-            <div className="col-lg-4">
-              <div
-                className="card border-0 shadow-sm h-100 card-animate"
-                style={{
-                  transition: 'all 0.3s ease',
-                }}
-                onMouseEnter={(e) => {
-                  e.currentTarget.style.transform = 'translateY(-10px) scale(1.03)';
-                  e.currentTarget.style.boxShadow = '0 10px 20px rgba(0,0,0,0.2)';
-                }}
-                onMouseLeave={(e) => {
-                  e.currentTarget.style.transform = 'translateY(0) scale(1)';
-                  e.currentTarget.style.boxShadow = '0 4px 10px rgba(0,0,0,0.1)';
-                }}
-              >
-                <div className="card-header bg-white">
-                  <h5 className="mb-0">Statut du Stock</h5>
-                </div>
-                <div className="card-body">
-                  <div className="text-center py-4">
-                    <div
-                      className="bg-light rounded-circle d-inline-flex align-items-center justify-content-center"
-                      style={{ width: '150px', height: '150px' }}
-                    >
-                      <div className="text-center">
-                        <h3 className="mb-0">85%</h3>
-                        <p className="text-muted mb-0">Disponible</p>
-                      </div>
-                    </div>
-                  </div>
-                  <div className="mt-3">
-                    <div className="d-flex justify-content-between mb-2">
-                      <span>En stock</span>
-                      <span>85%</span>
-                    </div>
-                    <div className="progress" style={{ height: '8px' }}>
-                      <div className="progress-bar bg-success" style={{ width: '85%' }}></div>
-                    </div>
-                  </div>
-                </div>
-              </div>
+              <h5 className="mt-3 text-muted">Chargement des données...</h5>
             </div>
           </div>
         </main>
-      </div>
-    </div>
+      </Layout>
+    );
+  }
+
+  if (!currentUser) return null;
+
+  return (
+    <Layout currentUser={currentUser} navigateTo={navigateTo} handleLogout={handleLogout}>
+      <style jsx>{`
+        @keyframes fadeIn {
+          from { opacity: 0; }
+          to { opacity: 1; }
+        }
+        @keyframes slideUp {
+          from { transform: translateY(20px); opacity: 0; }
+          to { transform: translateY(0); opacity: 1; }
+        }
+        .animate-fade-in {
+          animation: fadeIn 0.5s ease-out forwards;
+        }
+        .animate-slide-up {
+          animation: slideUp 0.5s ease-out forwards;
+        }
+        .card-hover {
+          transition: all 0.3s cubic-bezier(0.25, 0.8, 0.25, 1);
+        }
+        .card-hover:hover {
+          transform: translateY(-5px);
+          box-shadow: 0 10px 20px rgba(0, 0, 0, 0.1), 0 6px 6px rgba(0, 0, 0, 0.05) !important;
+        }
+        .stat-card {
+          border-left: 4px solid;
+          border-radius: 0.375rem;
+        }
+        .stat-card-icon {
+          width: 48px;
+          height: 48px;
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          border-radius: 12px;
+        }
+        .progress-thin {
+          height: 6px;
+        }
+        .chart-container {
+          height: 350px;
+          position: relative;
+        }
+        .alert-item {
+          transition: all 0.2s ease;
+          border-left: 3px solid transparent;
+        }
+        .alert-item:hover {
+          background-color: rgba(248, 249, 250, 0.8);
+          border-left-color: var(--bs-danger);
+        }
+        .availability-circle {
+          width: 140px;
+          height: 140px;
+          border: 8px solid #f0f0f0;
+          border-radius: 50%;
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          margin: 0 auto;
+          position: relative;
+        }
+        .availability-circle::before {
+          content: '';
+          position: absolute;
+          width: 120px;
+          height: 120px;
+          border-radius: 50%;
+          background-color: white;
+        }
+        .availability-content {
+          position: relative;
+          z-index: 1;
+        }
+      `}</style>
+      
+      <main >
+        
+        {errorMessage && (
+          <div className="alert alert-danger d-flex justify-content-between align-items-center mb-4 animate-fade-in">
+            <div className="d-flex align-items-center">
+              <i className="bi bi-exclamation-triangle-fill me-2"></i>
+              <span>{errorMessage}</span>
+            </div>
+            <button onClick={retryFetch} className="btn btn-sm btn-outline-danger">
+              <i className="bi bi-arrow-clockwise me-1"></i> Réessayer
+            </button>
+          </div>
+        )}
+
+        
+        <div className="d-flex justify-content-between flex-wrap align-items-center mb-4">
+          <div>
+            <h1 className="h2 fw-bold mb-1">Tableau de Bord</h1>
+            <nav aria-label="breadcrumb">
+              <ol className="breadcrumb">
+                <li className="breadcrumb-item active" aria-current="page">Accueil</li>
+              </ol>
+            </nav>
+          </div>
+          <div className="d-flex align-items-center mt-2 mt-md-0">
+            <button
+              onClick={handleDownloadStats}
+              className="btn btn-primary me-3 d-flex align-items-center"
+            >
+              <i className="bi bi-file-earmark-pdf me-2"></i> Exporter PDF
+            </button>
+            <div className="d-flex align-items-center">
+              <div className="me-2 text-end d-none d-md-block">
+                <h6 className="mb-0 fw-semibold">{currentUser.name || 'Administrateur'}</h6>
+                <small className="text-muted">Connecté</small>
+              </div>
+              <div className="bg-primary bg-opacity-10 rounded-circle p-2">
+                <i className="bi bi-person-circle text-primary"></i>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div className="row row-cols-1 row-cols-md-3 g-4 mb-4">
+          {[
+            { 
+              title: 'Produits', 
+              value: stats?.totalStock || 0, 
+              unit: 'en stock', 
+              icon: 'bi-box-seam', 
+              color: 'primary',
+              borderColor: 'border-primary'
+            },
+            { 
+              title: 'Ventes', 
+              value: stats?.totalSales?.toFixed(2) || 0, 
+              unit: 'DH', 
+              icon: 'bi-currency-dollar', 
+              color: 'success',
+              borderColor: 'border-success'
+            },
+            { 
+              title: 'Ruptures', 
+              value: stats?.lowStock || 0, 
+              unit: 'produits', 
+              icon: 'bi-exclamation-triangle', 
+              color: 'warning',
+              borderColor: 'border-warning'
+            },
+          ].map((card, index) => (
+            <div key={index} className="col">
+              <div
+                className={`card h-100 shadow-sm card-hover animate-slide-up stat-card ${card.borderColor}`}
+                style={{ animationDelay: `${index * 0.1}s` }}
+              >
+                <div className="card-body">
+                  <div className="d-flex align-items-center">
+                    <div className={`stat-card-icon bg-${card.color}-subtle me-3`}>
+                      <i className={`bi ${card.icon} text-${card.color} fs-4`}></i>
+                    </div>
+                    <div className="flex-grow-1">
+                      <h6 className="text-muted text-uppercase fs-7 fw-semibold mb-1">{card.title}</h6>
+                      <h3 className="mb-0 fw-bold">{card.value}</h3>
+                      <small className="text-muted">{card.unit}</small>
+                    </div>
+                    <div className="ms-auto">
+                      <div className={`bg-${card.color}-subtle rounded p-2`}>
+                        <i className={`bi bi-arrow-up text-${card.color}`}></i>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          ))}
+        </div>
+
+        <div className="row g-4">
+          <div className="col-lg-8">
+            <div className="card border-0 shadow-sm h-100 animate-slide-up" style={{ animationDelay: '0.3s' }}>
+              <div className="card-header bg-white border-0 py-3">
+                <div className="d-flex justify-content-between align-items-center">
+                  <h5 className="mb-0 fw-semibold">Alertes de Stock</h5>
+                  <span className="badge bg-danger">{lowStockProduits.length}</span>
+                </div>
+              </div>
+              <div className="card-body p-0">
+                <div className="list-group list-group-flush">
+                  {lowStockProduits.length === 0 ? (
+                    <div className="text-center py-5">
+                      <i className="bi bi-check-circle-fill text-success fs-1"></i>
+                      <h5 className="mt-3 fw-semibold">Aucune alerte</h5>
+                      <p className="text-muted">Tous les produits sont bien approvisionnés</p>
+                    </div>
+                  ) : (
+                    lowStockProduits.map((produit, idx) => (
+                      <div
+                        key={`low-${produit.id}`}
+                        className="list-group-item alert-item py-3 px-4"
+                      >
+                        <div className="d-flex align-items-center">
+                          <div className="bg-danger bg-opacity-10 p-2 rounded me-3">
+                            <i className="bi bi-exclamation-triangle text-danger"></i>
+                          </div>
+                          <div className="flex-grow-1">
+                            <div className="d-flex justify-content-between align-items-center">
+                              <h6 className="mb-0 fw-semibold">{produit.nom}</h6>
+                              <span className="badge bg-danger">Urgent</span>
+                            </div>
+                            <div className="d-flex justify-content-between mt-2">
+                              <small className="text-muted">
+                                Stock actuel: <span className="fw-semibold">{produit.stock}</span>
+                              </small>
+                              <small className="text-muted">
+                                Seuil: <span className="fw-semibold">{produit.alerteStock}</span>
+                              </small>
+                            </div>
+                            <div className="progress progress-thin mt-2">
+                              <div
+                                className="progress-bar bg-danger"
+                                role="progressbar"
+                                style={{ width: `${(produit.stock / produit.alerteStock) * 100}%` }}
+                                aria-valuenow={produit.stock}
+                                aria-valuemin="0"
+                                aria-valuemax={produit.alerteStock}
+                              ></div>
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+                    ))
+                  )}
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <div className="col-lg-4">
+            <div className="card border-0 shadow-sm h-100 animate-slide-up" style={{ animationDelay: '0.4s' }}>
+              <div className="card-header bg-white border-0 py-3">
+                <h5 className="mb-0 fw-semibold">Disponibilité du Stock</h5>
+              </div>
+              <div className="card-body text-center">
+                <div className="availability-circle mb-4">
+                  <div className="availability-content">
+                    <h3 className="mb-0 fw-bold">{stats?.stockAvailability?.toFixed(2) || 0}%</h3>
+                    <p className="text-muted mb-0">Disponible</p>
+                  </div>
+                </div>
+                <div className="mt-4">
+                  <div className="d-flex justify-content-between mb-2">
+                    <span className="text-muted">Niveau actuel</span>
+                    <span className="fw-semibold">{stats?.stockAvailability?.toFixed(2) || 0}%</span>
+                  </div>
+                  <div className="progress progress-thin">
+                    <div
+                      className="progress-bar bg-primary"
+                      role="progressbar"
+                      style={{ width: `${stats?.stockAvailability || 0}%` }}
+                      aria-valuenow={stats?.stockAvailability || 0}
+                      aria-valuemin="0"
+                      aria-valuemax="100"
+                    ></div>
+                  </div>
+                  <div className="mt-3 d-flex justify-content-between">
+                    <small className="text-muted">0%</small>
+                    <small className="text-muted">100%</small>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div className="card border-0 shadow-sm mt-4 animate-slide-up" style={{ animationDelay: '0.5s' }}>
+          <div className="card-header bg-white border-0 py-3">
+            <h5 className="mb-0 fw-semibold">Analyse des Statistiques</h5>
+          </div>
+          <div className="card-body">
+            <div className="chart-container">
+              <Bar data={chartData} options={chartOptions} />
+            </div>
+          </div>
+        </div>
+      </main>
+    </Layout>
   );
 };
 
