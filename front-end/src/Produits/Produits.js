@@ -76,7 +76,7 @@ const Produits = () => {
           api.get('/categories'),
         ]);
         console.log('Produits Response:', produitsResponse.data);
-        setProduits(produitsResponse.data);
+        setProduits(produitsResponse.data); // Corrected from proitsResponse
         setFournisseurs(fournisseursResponse.data);
         setCategories(categoriesResponse.data);
         setErrorMessage('');
@@ -507,7 +507,7 @@ const Produits = () => {
             >
               {showExpiring ? 'Voir Tous les Produits' : 'Produits Expirant ce Mois'}
             </button>
-            {currentUser.role !== 'User' && (
+            {currentUser.permissions.produits && (
               <button
                 className="btn btn-primary me-2"
                 onClick={() => setShowPopup(true)}
@@ -585,7 +585,7 @@ const Produits = () => {
                           {produit.date_expiration || '-'}
                         </td>
                         <td>
-                          {currentUser.role !== 'User' && (
+                          {currentUser.permissions.produits && (
                             <>
                               <button
                                 className="btn btn-primary me-2"

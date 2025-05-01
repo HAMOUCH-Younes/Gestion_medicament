@@ -5,7 +5,6 @@ import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
 import Layout from '../Layout/Layout';
 
-
 const Clients = () => {
   const [search, setSearch] = useState('');
   const [clients, setClients] = useState([]);

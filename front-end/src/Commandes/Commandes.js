@@ -125,7 +125,7 @@ const Commandes = () => {
       setNewProduit(prev => ({
         ...prev,
         produit_id: value,
-        prix: selectedProduct ? parseFloat(selectedProduct.prix) : '',
+        prix: selectedProduct ? parseFloat(selectedProduct.prix_vente) : '',
       }));
     } else {
       setNewProduit(prev => ({
@@ -739,7 +739,7 @@ const Commandes = () => {
                       {errorMessage}
                     </div>
                   )}
-                  <form onPhysicsInfoSubmit={handleAddCommande}>
+                  <form onSubmit={handleAddCommande}>
                     <div className="row">
                       <div className="col-md-6 mb-3">
                         <label className="form-label">Client</label>
