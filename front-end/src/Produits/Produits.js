@@ -16,6 +16,7 @@ const Produits = () => {
   const [showExpiring, setShowExpiring] = useState(false);
   const [showDeletePopup, setShowDeletePopup] = useState(false);
   const [selectedProduit, setSelectedProduit] = useState(null);
+  const [currentUser, setCurrentUser] = useState(null);
   const [produitToDelete, setProduitToDelete] = useState(null);
   const [newProduit, setNewProduit] = useState({
     nom: '',
@@ -32,6 +33,7 @@ const Produits = () => {
   const [editProduit, setEditProduit] = useState(null);
   const [errors, setErrors] = useState({});
   const [errorMessage, setErrorMessage] = useState('');
+  const [loading, setLoading] = useState(true);
 
   const navigate = useNavigate();
   const apiUrl = 'http://localhost:8000/api';
@@ -56,15 +58,18 @@ const Produits = () => {
   );
 
   useEffect(() => {
-    const token = localStorage.getItem('token');
-    console.log('Token for Produits:', token);
-    if (!token) {
-      navigate('/');
-      return;
-    }
-
     const fetchData = async () => {
+      setLoading(true);
       try {
+        const userResponse = await api.get('/user');
+        const user = userResponse.data;
+        setCurrentUser(user);
+
+        if (!user.permissions.produits) {
+          navigate('/dashboard');
+          return;
+        }
+
         const [produitsResponse, fournisseursResponse, categoriesResponse] = await Promise.all([
           api.get('/produits'),
           api.get('/fournisseurs'),
@@ -78,10 +83,32 @@ const Produits = () => {
       } catch (error) {
         console.error('Error fetching data:', error.response || error);
         setErrorMessage('Failed to load data: ' + (error.response?.data?.message || 'Unknown error'));
+        if (error.response?.status === 401) {
+          localStorage.removeItem('token');
+          navigate('/');
+        }
+      } finally {
+        setLoading(false);
       }
     };
     fetchData();
   }, [navigate]);
+
+  const navigateTo = (path) => {
+    navigate(`/${path}`);
+  };
+
+  const handleLogout = async () => {
+    try {
+      await api.post('/logout');
+      localStorage.removeItem('token');
+      navigate('/');
+    } catch (error) {
+      console.error('Error logging out:', error.response || error);
+      localStorage.removeItem('token');
+      navigate('/');
+    }
+  };
 
   const getFournisseurName = (fournisseurId) => {
     const fournisseur = fournisseurs.find((f) => f.id === parseInt(fournisseurId));
@@ -447,680 +474,704 @@ const Produits = () => {
     (editProduit.prix_vente || editProduit.prix_vente === 0) &&
     (editProduit.stock || editProduit.stock === 0);
 
-  return (
-    <Layout>
-      {errorMessage && (
-        <div className="alert alert-danger" role="alert">
-          {errorMessage}
-        </div>
-      )}
-      <div className="d-flex justify-content-between align-items-center mb-4">
-        <h1>Produits</h1>
-        <div>
-          <button
-            className="btn btn-warning me-2"
-            onClick={() => setShowExpiring(!showExpiring)}
-          >
-            {showExpiring ? 'Voir Tous les Produits' : 'Produits Expirant ce Mois'}
-          </button>
-          <button
-            className="btn btn-primary me-2"
-            onClick={() => setShowPopup(true)}
-          >
-            <i className="bi bi-plus-circle me-2"></i>Ajouter Produit
-          </button>
-          <button
-            className="btn btn-success"
-            onClick={handleDownloadAllProduits}
-            disabled={produits.length === 0}
-          >
-            <i className="bi bi-download me-2"></i>Télécharger Tous
-          </button>
-        </div>
-      </div>
-      <div className="card border-0 shadow-sm">
-        <div className="card-body">
-          <div className="d-flex justify-content-end mb-3">
-            <input
-              type="text"
-              className="form-control"
-              style={{ maxWidth: '300px' }}
-              placeholder="Rechercher un produit..."
-              value={search}
-              onChange={handleSearch}
-              disabled={showExpiring}
-            />
+  if (loading) {
+    return (
+      <Layout>
+        <div className="d-flex justify-content-center align-items-center vh-100">
+          <div className="spinner-border text-primary" role="status">
+            <span className="visually-hidden">Chargement...</span>
           </div>
-          <div className="table-responsive" style={{ maxHeight: '500px', overflowY: 'auto' }}>
-            <table className="table table-hover align-middle">
-              <thead className="table-dark">
-                <tr>
-                  <th>ID</th>
-                  <th>Nom</th>
-                  <th>Catégorie</th>
-                  <th>Stock disponible</th>
-                  <th>Date Expiration</th>
-                  <th style={{ minWidth: '220px' }}>Actions</th>
-                </tr>
-              </thead>
-              <tbody>
-                {filteredProduits.length > 0 ? (
-                  filteredProduits.map((produit) => (
-                    <tr key={produit.id}>
-                      <td
-                        onClick={() => handleProduitClick(produit)}
-                        style={{ cursor: 'pointer' }}
-                      >
-                        {produit.id}
-                      </td>
-                      <td
-                        onClick={() => handleProduitClick(produit)}
-                        style={{ cursor: 'pointer' }}
-                      >
-                        {produit.nomProduit || 'Inconnu'}
-                      </td>
-                      <td
-                        onClick={() => handleProduitClick(produit)}
-                        style={{ cursor: 'pointer' }}
-                      >
-                        {produit.categorie ? produit.categorie.nom : getCategorieName(produit.categorie_id)}
-                      </td>
-                      <td
-                        onClick={() => handleProduitClick(produit)}
-                        style={{ cursor: 'pointer' }}
-                        className={produit.stock <= produit.alerte_stock ? 'text-danger' : ''}
-                      >
-                        {produit.stock}
-                      </td>
-                      <td
-                        onClick={() => handleProduitClick(produit)}
-                        style={{ cursor: 'pointer' }}
-                      >
-                        {produit.date_expiration || '-'}
-                      </td>
-                      <td>
-                        <button
-                          className="btn btn-primary me-2"
-                          style={{
-                            backgroundColor: '#007bff',
-                            borderColor: '#007bff',
-                            padding: '6px 12px',
-                            fontSize: '14px',
-                            minWidth: '80px',
-                          }}
-                          onClick={() => handleEditClick(produit)}
-                          title="Éditer"
+        </div>
+      </Layout>
+    );
+  }
+
+  if (!currentUser) {
+    return null;
+  }
+
+  return (
+    <Layout currentUser={currentUser} navigateTo={navigateTo} handleLogout={handleLogout}>
+      <div className="container-fluid p-4">
+        {errorMessage && (
+          <div className="alert alert-danger" role="alert">
+            {errorMessage}
+          </div>
+        )}
+        <div className="d-flex justify-content-between align-items-center mb-4">
+          <h1>Produits</h1>
+          <div>
+            <button
+              className="btn btn-warning me-2"
+              onClick={() => setShowExpiring(!showExpiring)}
+            >
+              {showExpiring ? 'Voir Tous les Produits' : 'Produits Expirant ce Mois'}
+            </button>
+            {currentUser.role !== 'User' && (
+              <button
+                className="btn btn-primary me-2"
+                onClick={() => setShowPopup(true)}
+              >
+                <i className="bi bi-plus-circle me-2"></i>Ajouter Produit
+              </button>
+            )}
+            <button
+              className="btn btn-success"
+              onClick={handleDownloadAllProduits}
+              disabled={produits.length === 0}
+            >
+              <i className="bi bi-download me-2"></i>Télécharger Tous
+            </button>
+          </div>
+        </div>
+        <div className="card border-0 shadow-sm">
+          <div className="card-body">
+            <div className="d-flex justify-content-end mb-3">
+              <input
+                type="text"
+                className="form-control"
+                style={{ maxWidth: '300px' }}
+                placeholder="Rechercher un produit..."
+                value={search}
+                onChange={handleSearch}
+                disabled={showExpiring}
+              />
+            </div>
+            <div className="table-responsive" style={{ maxHeight: '500px', overflowY: 'auto' }}>
+              <table className="table table-hover align-middle">
+                <thead className="table-dark">
+                  <tr>
+                    <th>ID</th>
+                    <th>Nom</th>
+                    <th>Catégorie</th>
+                    <th>Stock disponible</th>
+                    <th>Date Expiration</th>
+                    <th style={{ minWidth: '220px' }}>Actions</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {filteredProduits.length > 0 ? (
+                    filteredProduits.map((produit) => (
+                      <tr key={produit.id}>
+                        <td
+                          onClick={() => handleProduitClick(produit)}
+                          style={{ cursor: 'pointer' }}
                         >
-                          <i className="bi bi-pencil me-1"></i> Éditer
-                        </button>
-                        <button
-                          className="btn btn-danger"
-                          style={{
-                            backgroundColor: '#dc3545',
-                            borderColor: '#dc3545',
-                            padding: '6px 12px',
-                            fontSize: '14px',
-                            minWidth: '80px',
-                          }}
-                          onClick={() => {
-                            setProduitToDelete(produit);
-                            setShowDeletePopup(true);
-                          }}
-                          title="Supprimer"
+                          {produit.id}
+                        </td>
+                        <td
+                          onClick={() => handleProduitClick(produit)}
+                          style={{ cursor: 'pointer' }}
                         >
-                          <i className="bi bi-trash me-1"></i> Supprimer
-                        </button>
+                          {produit.nomProduit || 'Inconnu'}
+                        </td>
+                        <td
+                          onClick={() => handleProduitClick(produit)}
+                          style={{ cursor: 'pointer' }}
+                        >
+                          {produit.categorie ? produit.categorie.nom : getCategorieName(produit.categorie_id)}
+                        </td>
+                        <td
+                          onClick={() => handleProduitClick(produit)}
+                          style={{ cursor: 'pointer' }}
+                          className={produit.stock <= produit.alerte_stock ? 'text-danger' : ''}
+                        >
+                          {produit.stock}
+                        </td>
+                        <td
+                          onClick={() => handleProduitClick(produit)}
+                          style={{ cursor: 'pointer' }}
+                        >
+                          {produit.date_expiration || '-'}
+                        </td>
+                        <td>
+                          {currentUser.role !== 'User' && (
+                            <>
+                              <button
+                                className="btn btn-primary me-2"
+                                style={{
+                                  backgroundColor: '#007bff',
+                                  borderColor: '#007bff',
+                                  padding: '6px 12px',
+                                  fontSize: '14px',
+                                  minWidth: '80px',
+                                }}
+                                onClick={() => handleEditClick(produit)}
+                                title="Éditer"
+                              >
+                                <i className="bi bi-pencil me-1"></i> Éditer
+                              </button>
+                              <button
+                                className="btn btn-danger"
+                                style={{
+                                  backgroundColor: '#dc3545',
+                                  borderColor: '#dc3545',
+                                  padding: '6px 12px',
+                                  fontSize: '14px',
+                                  minWidth: '80px',
+                                }}
+                                onClick={() => {
+                                  setProduitToDelete(produit);
+                                  setShowDeletePopup(true);
+                                }}
+                                title="Supprimer"
+                              >
+                                <i className="bi bi-trash me-1"></i> Supprimer
+                              </button>
+                            </>
+                          )}
+                        </td>
+                      </tr>
+                    ))
+                  ) : (
+                    <tr>
+                      <td colSpan="6" className="text-center">
+                        Aucun produit {showExpiring ? 'expirant ce mois' : 'trouvé'}
                       </td>
                     </tr>
-                  ))
-                ) : (
-                  <tr>
-                    <td colSpan="6" className="text-center">
-                      Aucun produit {showExpiring ? 'expirant ce mois' : 'trouvé'}
-                    </td>
-                  </tr>
-                )}
-              </tbody>
-            </table>
-          </div>
-        </div>
-      </div>
-      {showPopup && (
-        <div
-          className="modal d-block"
-          style={{ backgroundColor: 'rgba(0,0,0,0.5)' }}
-          onClick={() => setShowPopup(false)}
-        >
-          <div
-            className="modal-dialog modal-lg"
-            onClick={(e) => e.stopPropagation()}
-          >
-            <div className="modal-content">
-              <div className="modal-header">
-                <h5 className="modal-title">Ajouter un Nouveau Produit</h5>
-                <button
-                  type="button"
-                  className="btn-close"
-                  onClick={() => {
-                    setShowPopup(false);
-                    setErrors({});
-                    setNewProduit({
-                      nom: '',
-                      categorie_id: '',
-                      prix_achat: '',
-                      prix_vente: '',
-                      stock: '',
-                      alerte_stock: '',
-                      date_expiration: '',
-                      image: null,
-                      description: '',
-                      fournisseur_id: '',
-                    });
-                  }}
-                ></button>
-              </div>
-              <div className="modal-body">
-                {errorMessage && (
-                  <div className="alert alert-danger" role="alert">
-                    {errorMessage}
-                  </div>
-                )}
-                <form onSubmit={handleAddProduit}>
-                  <div className="row">
-                    <div className="col-md-6 mb-3">
-                      <label className="form-label">Nom du Produit</label>
-                      <input
-                        type="text"
-                        className={`form-control ${errors.nom ? 'is-invalid' : ''}`}
-                        name="nom"
-                        value={newProduit.nom}
-                        onChange={handleInputChange}
-                        required
-                      />
-                      {errors.nom && <div className="invalid-feedback">{errors.nom}</div>}
-                    </div>
-                    <div className="col-md-6 mb-3">
-                      <label className="form-label">Catégorie (optionnel)</label>
-                      <select
-                        className="form-control"
-                        name="categorie_id"
-                        value={newProduit.categorie_id}
-                        onChange={handleInputChange}
-                      >
-                        <option value="">Sélectionner une catégorie</option>
-                        {categories.map((categorie) => (
-                          <option key={categorie.id} value={categorie.id}>
-                            {categorie.nom}
-                          </option>
-                        ))}
-                      </select>
-                    </div>
-                    <div className="col-md-6 mb-3">
-                      <label className="form-label">Fournisseur (optionnel)</label>
-                      <select
-                        className="form-control"
-                        name="fournisseur_id"
-                        value={newProduit.fournisseur_id}
-                        onChange={handleInputChange}
-                      >
-                        <option value="">Sélectionner un fournisseur</option>
-                        {fournisseurs.map((fournisseur) => (
-                          <option key={fournisseur.id} value={fournisseur.id}>
-                            {fournisseur.nom_societe || fournisseur.nom}
-                          </option>
-                        ))}
-                      </select>
-                    </div>
-                    <div className="col-md-6 mb-3">
-                      <label className="form-label">Prix d'Achat (DH)</label>
-                      <input
-                        type="number"
-                        className={`form-control ${errors.prix_achat ? 'is-invalid' : ''}`}
-                        name="prix_achat"
-                        value={newProduit.prix_achat}
-                        onChange={handleInputChange}
-                        step="0.01"
-                        min="0"
-                        required
-                      />
-                      {errors.prix_achat && <div className="invalid-feedback">{errors.prix_achat}</div>}
-                    </div>
-                    <div className="col-md-6 mb-3">
-                      <label className="form-label">Prix de Vente (DH)</label>
-                      <input
-                        type="number"
-                        className={`form-control ${errors.prix_vente ? 'is-invalid' : ''}`}
-                        name="prix_vente"
-                        value={newProduit.prix_vente}
-                        onChange={handleInputChange}
-                        step="0.01"
-                        min="0"
-                        required
-                      />
-                      {errors.prix_vente && <div className="invalid-feedback">{errors.prix_vente}</div>}
-                    </div>
-                    <div className="col-md-6 mb-3">
-                      <label className="form-label">Stock disponible</label>
-                      <input
-                        type="number"
-                        className={`form-control ${errors.stock ? 'is-invalid' : ''}`}
-                        name="stock"
-                        value={newProduit.stock}
-                        onChange={handleInputChange}
-                        min="0"
-                        required
-                      />
-                      {errors.stock && <div className="invalid-feedback">{errors.stock}</div>}
-                    </div>
-                    <div className="col-md-6 mb-3">
-                      <label className="form-label">Alerte Stock Minimum</label>
-                      <input
-                        type="number"
-                        className="form-control"
-                        name="alerte_stock"
-                        value={newProduit.alerte_stock}
-                        onChange={handleInputChange}
-                        min="0"
-                      />
-                    </div>
-                    <div className="col-md-6 mb-3">
-                      <label className="form-label">Date d'Expiration</label>
-                      <input
-                        type="date"
-                        className="form-control"
-                        name="date_expiration"
-                        value={newProduit.date_expiration}
-                        onChange={handleInputChange}
-                      />
-                    </div>
-                    <div className="col-md-6 mb-3">
-                      <label className="form-label">Image du Produit</label>
-                      <input
-                        type="file"
-                        className="form-control"
-                        accept="image/*"
-                        onChange={(e) => handleImageUpload(e)}
-                      />
-                      {newProduit.image && typeof newProduit.image === 'string' && (
-                        <img
-                          src={`${apiUrl}/storage/${newProduit.image}`}
-                          alt="Preview"
-                          style={{
-                            width: '100px',
-                            height: '100px',
-                            objectFit: 'cover',
-                            marginTop: '10px',
-                          }}
-                        />
-                      )}
-                    </div>
-                    <div className="col-md-12 mb-3">
-                      <label className="form-label">Description</label>
-                      <textarea
-                        className="form-control"
-                        name="description"
-                        value={newProduit.description}
-                        onChange={handleInputChange}
-                        rows="4"
-                      ></textarea>
-                    </div>
-                  </div>
-                  <div className="d-flex justify-content-end">
-                    <button
-                      type="button"
-                      className="btn btn-secondary me-2"
-                      onClick={() => {
-                        setShowPopup(false);
-                        setErrors({});
-                      }}
-                    >
-                      Annuler
-                    </button>
-                    <button
-                      type="submit"
-                      className="btn btn-primary"
-                      disabled={
-                        !(
-                          newProduit.nom &&
-                          (newProduit.prix_achat || newProduit.prix_achat === 0) &&
-                          (newProduit.prix_vente || newProduit.prix_vente === 0) &&
-                          (newProduit.stock || newProduit.stock === 0)
-                        )
-                      }
-                    >
-                      Ajouter
-                    </button>
-                  </div>
-                </form>
-              </div>
+                  )}
+                </tbody>
+              </table>
             </div>
           </div>
         </div>
-      )}
-      {showEditPopup && editProduit && (
-        <div
-          className="modal d-block"
-          style={{ backgroundColor: 'rgba(0,0,0,0.5)' }}
-          onClick={() => setShowEditPopup(false)}
-        >
+        {showPopup && (
           <div
-            className="modal-dialog modal-lg"
-            onClick={(e) => e.stopPropagation()}
+            className="modal d-block"
+            style={{ backgroundColor: 'rgba(0,0,0,0.5)' }}
+            onClick={() => setShowPopup(false)}
           >
-            <div className="modal-content">
-              <div className="modal-header">
-                <h5 className="modal-title">Modifier le Produit: {editProduit.nom}</h5>
-                <button
-                  type="button"
-                  className="btn-close"
-                  onClick={() => {
-                    setShowEditPopup(false);
-                    setErrors({});
-                  }}
-                ></button>
-              </div>
-              <div className="modal-body">
-                {errorMessage && (
-                  <div className="alert alert-danger" role="alert">
-                    {errorMessage}
-                  </div>
-                )}
-                <form onSubmit={handleEditProduit}>
-                  <div className="row">
-                    <div className="col-md-6 mb-3">
-                      <label className="form-label">Nom du Produit</label>
-                      <input
-                        type="text"
-                        className={`form-control ${errors.nom ? 'is-invalid' : ''}`}
-                        name="nom"
-                        value={editProduit.nom}
-                        onChange={handleEditInputChange}
-                        required
-                      />
-                      {errors.nom && <div className="invalid-feedback">{errors.nom}</div>}
+            <div
+              className="modal-dialog modal-lg"
+              onClick={(e) => e.stopPropagation()}
+            >
+              <div className="modal-content">
+                <div className="modal-header">
+                  <h5 className="modal-title">Ajouter un Nouveau Produit</h5>
+                  <button
+                    type="button"
+                    className="btn-close"
+                    onClick={() => {
+                      setShowPopup(false);
+                      setErrors({});
+                      setNewProduit({
+                        nom: '',
+                        categorie_id: '',
+                        prix_achat: '',
+                        prix_vente: '',
+                        stock: '',
+                        alerte_stock: '',
+                        date_expiration: '',
+                        image: null,
+                        description: '',
+                        fournisseur_id: '',
+                      });
+                    }}
+                  ></button>
+                </div>
+                <div className="modal-body">
+                  {errorMessage && (
+                    <div className="alert alert-danger" role="alert">
+                      {errorMessage}
                     </div>
-                    <div className="col-md-6 mb-3">
-                      <label className="form-label">Catégorie (optionnel)</label>
-                      <select
-                        className="form-control"
-                        name="categorie_id"
-                        value={editProduit.categorie_id}
-                        onChange={handleEditInputChange}
-                      >
-                        <option value="">Sélectionner une catégorie</option>
-                        {categories.map((categorie) => (
-                          <option key={categorie.id} value={categorie.id}>
-                            {categorie.nom}
-                          </option>
-                        ))}
-                      </select>
-                    </div>
-                    <div className="col-md-6 mb-3">
-                      <label className="form-label">Fournisseur (optionnel)</label>
-                      <select
-                        className="form-control"
-                        name="fournisseur_id"
-                        value={editProduit.fournisseur_id}
-                        onChange={handleEditInputChange}
-                      >
-                        <option value="">Sélectionner un fournisseur</option>
-                        {fournisseurs.map((fournisseur) => (
-                          <option key={fournisseur.id} value={fournisseur.id}>
-                            {fournisseur.nom_societe || fournisseur.nom}
-                          </option>
-                        ))}
-                      </select>
-                    </div>
-                    <div className="col-md-6 mb-3">
-                      <label className="form-label">Prix d'Achat (DH)</label>
-                      <input
-                        type="number"
-                        className={`form-control ${errors.prix_achat ? 'is-invalid' : ''}`}
-                        name="prix_achat"
-                        value={editProduit.prix_achat}
-                        onChange={handleEditInputChange}
-                        step="0.01"
-                        min="0"
-                        required
-                      />
-                      {errors.prix_achat && <div className="invalid-feedback">{errors.prix_achat}</div>}
-                    </div>
-                    <div className="col-md-6 mb-3">
-                      <label className="form-label">Prix de Vente (DH)</label>
-                      <input
-                        type="number"
-                        className={`form-control ${errors.prix_vente ? 'is-invalid' : ''}`}
-                        name="prix_vente"
-                        value={editProduit.prix_vente}
-                        onChange={handleEditInputChange}
-                        step="0.01"
-                        min="0"
-                        required
-                      />
-                      {errors.prix_vente && <div className="invalid-feedback">{errors.prix_vente}</div>}
-                    </div>
-                    <div className="col-md-6 mb-3">
-                      <label className="form-label">Stock disponible</label>
-                      <input
-                        type="number"
-                        className={`form-control ${errors.stock ? 'is-invalid' : ''}`}
-                        name="stock"
-                        value={editProduit.stock}
-                        onChange={handleEditInputChange}
-                        min="0"
-                        required
-                      />
-                      {errors.stock && <div className="invalid-feedback">{errors.stock}</div>}
-                    </div>
-                    <div className="col-md-6 mb-3">
-                      <label className="form-label">Alerte Stock Minimum</label>
-                      <input
-                        type="number"
-                        className="form-control"
-                        name="alerte_stock"
-                        value={editProduit.alerte_stock}
-                        onChange={handleEditInputChange}
-                        min="0"
-                      />
-                    </div>
-                    <div className="col-md-6 mb-3">
-                      <label className="form-label">Date d'Expiration</label>
-                      <input
-                        type="date"
-                        className="form-control"
-                        name="date_expiration"
-                        value={editProduit.date_expiration}
-                        onChange={handleEditInputChange}
-                      />
-                    </div>
-                    <div className="col-md-6 mb-3">
-                      <label className="form-label">Image du Produit</label>
-                      <input
-                        type="file"
-                        className="form-control"
-                        accept="image/*"
-                        onChange={(e) => handleImageUpload(e, true)}
-                      />
-                      {editProduit.image && typeof editProduit.image === 'string' && (
-                        <img
-                          src={`${apiUrl}/storage/${editProduit.image}`}
-                          alt="Preview"
-                          style={{
-                            width: '100px',
-                            height: '100px',
-                            objectFit: 'cover',
-                            marginTop: '10px',
-                          }}
+                  )}
+                  <form onSubmit={handleAddProduit}>
+                    <div className="row">
+                      <div className="col-md-6 mb-3">
+                        <label className="form-label">Nom du Produit</label>
+                        <input
+                          type="text"
+                          className={`form-control ${errors.nom ? 'is-invalid' : ''}`}
+                          name="nom"
+                          value={newProduit.nom}
+                          onChange={handleInputChange}
+                          required
                         />
-                      )}
+                        {errors.nom && <div className="invalid-feedback">{errors.nom}</div>}
+                      </div>
+                      <div className="col-md-6 mb-3">
+                        <label className="form-label">Catégorie (optionnel)</label>
+                        <select
+                          className="form-control"
+                          name="categorie_id"
+                          value={newProduit.categorie_id}
+                          onChange={handleInputChange}
+                        >
+                          <option value="">Sélectionner une catégorie</option>
+                          {categories.map((categorie) => (
+                            <option key={categorie.id} value={categorie.id}>
+                              {categorie.nom}
+                            </option>
+                          ))}
+                        </select>
+                      </div>
+                      <div className="col-md-6 mb-3">
+                        <label className="form-label">Fournisseur (optionnel)</label>
+                        <select
+                          className="form-control"
+                          name="fournisseur_id"
+                          value={newProduit.fournisseur_id}
+                          onChange={handleInputChange}
+                        >
+                          <option value="">Sélectionner un fournisseur</option>
+                          {fournisseurs.map((fournisseur) => (
+                            <option key={fournisseur.id} value={fournisseur.id}>
+                              {fournisseur.nom_societe || fournisseur.nom}
+                            </option>
+                          ))}
+                        </select>
+                      </div>
+                      <div className="col-md-6 mb-3">
+                        <label className="form-label">Prix d'Achat (DH)</label>
+                        <input
+                          type="number"
+                          className={`form-control ${errors.prix_achat ? 'is-invalid' : ''}`}
+                          name="prix_achat"
+                          value={newProduit.prix_achat}
+                          onChange={handleInputChange}
+                          step="0.01"
+                          min="0"
+                          required
+                        />
+                        {errors.prix_achat && <div className="invalid-feedback">{errors.prix_achat}</div>}
+                      </div>
+                      <div className="col-md-6 mb-3">
+                        <label className="form-label">Prix de Vente (DH)</label>
+                        <input
+                          type="number"
+                          className={`form-control ${errors.prix_vente ? 'is-invalid' : ''}`}
+                          name="prix_vente"
+                          value={newProduit.prix_vente}
+                          onChange={handleInputChange}
+                          step="0.01"
+                          min="0"
+                          required
+                        />
+                        {errors.prix_vente && <div className="invalid-feedback">{errors.prix_vente}</div>}
+                      </div>
+                      <div className="col-md-6 mb-3">
+                        <label className="form-label">Stock disponible</label>
+                        <input
+                          type="number"
+                          className={`form-control ${errors.stock ? 'is-invalid' : ''}`}
+                          name="stock"
+                          value={newProduit.stock}
+                          onChange={handleInputChange}
+                          min="0"
+                          required
+                        />
+                        {errors.stock && <div className="invalid-feedback">{errors.stock}</div>}
+                      </div>
+                      <div className="col-md-6 mb-3">
+                        <label className="form-label">Alerte Stock Minimum</label>
+                        <input
+                          type="number"
+                          className="form-control"
+                          name="alerte_stock"
+                          value={newProduit.alerte_stock}
+                          onChange={handleInputChange}
+                          min="0"
+                        />
+                      </div>
+                      <div className="col-md-6 mb-3">
+                        <label className="form-label">Date d'Expiration</label>
+                        <input
+                          type="date"
+                          className="form-control"
+                          name="date_expiration"
+                          value={newProduit.date_expiration}
+                          onChange={handleInputChange}
+                        />
+                      </div>
+                      <div className="col-md-6 mb-3">
+                        <label className="form-label">Image du Produit</label>
+                        <input
+                          type="file"
+                          className="form-control"
+                          accept="image/*"
+                          onChange={(e) => handleImageUpload(e)}
+                        />
+                        {newProduit.image && typeof newProduit.image === 'string' && (
+                          <img
+                            src={`${apiUrl}/storage/${newProduit.image}`}
+                            alt="Preview"
+                            style={{
+                              width: '100px',
+                              height: '100px',
+                              objectFit: 'cover',
+                              marginTop: '10px',
+                            }}
+                          />
+                        )}
+                      </div>
+                      <div className="col-md-12 mb-3">
+                        <label className="form-label">Description</label>
+                        <textarea
+                          className="form-control"
+                          name="description"
+                          value={newProduit.description}
+                          onChange={handleInputChange}
+                          rows="4"
+                        ></textarea>
+                      </div>
                     </div>
-                    <div className="col-md-12 mb-3">
-                      <label className="form-label">Description</label>
-                      <textarea
-                        className="form-control"
-                        name="description"
-                        value={editProduit.description}
-                        onChange={handleEditInputChange}
-                        rows="4"
-                      ></textarea>
-                    </div>
-                  </div>
-                  <div className="d-flex justify-content-end">
-                    <button
-                      type="button"
-                      className="btn btn-secondary me-2"
-                      onClick={() => {
-                        setShowEditPopup(false);
-                        setErrors({});
-                      }}
-                    >
-                      Annuler
-                    </button>
-                    <button
-                      type="submit"
-                      className="btn btn-primary"
-                      disabled={!isEditFormValid}
-                    >
-                      Enregistrer
-                    </button>
-                  </div>
-                </form>
-              </div>
-            </div>
-          </div>
-        </div>
-      )}
-      {showDetailPopup && selectedProduit && (
-        <div
-          className="modal d-block"
-          style={{ backgroundColor: 'rgba(0,0,0,0.5)' }}
-          onClick={() => setShowDetailPopup(false)}
-        >
-          <div
-            className="modal-dialog modal-lg"
-            onClick={(e) => e.stopPropagation()}
-          >
-            <div className="modal-content">
-              <div className="modal-header">
-                <h5 className="modal-title">Détails du Produit: {selectedProduit.nomProduit || 'Inconnu'}</h5>
-                <button
-                  type="button"
-                  className="btn-close"
-                  onClick={() => setShowDetailPopup(false)}
-                ></button>
-              </div>
-              <div className="modal-body">
-                <div className="row">
-                  <div className="col-md-6 mb-3">
-                    <strong>ID:</strong> {selectedProduit.id}
-                  </div>
-                  <div className="col-md-6 mb-3">
-                    <strong>Nom:</strong> {selectedProduit.nomProduit || 'Inconnu'}
-                  </div>
-                  <div className="col-md-6 mb-3">
-                    <strong>Catégorie:</strong> {selectedProduit.categorie ? selectedProduit.categorie.nom : getCategorieName(selectedProduit.categorie_id)}
-                  </div>
-                  <div className="col-md-6 mb-3">
-                    <strong>Fournisseur:</strong> {getFournisseurName(selectedProduit.fournisseur_id)}
-                  </div>
-                  <div className="col-md-6 mb-3">
-                    <strong>Prix d'Achat (DH):</strong> {Number(selectedProduit.prix_achat).toFixed(2)}
-                  </div>
-                  <div className="col-md-6 mb-3">
-                    <strong>Prix de Vente (DH):</strong> {Number(selectedProduit.prix_vente).toFixed(2)}
-                  </div>
-                  <div className="col-md-6 mb-3">
-                    <strong>Stock disponible:</strong> {selectedProduit.stock}
-                    {selectedProduit.stock <= selectedProduit.alerte_stock && (
-                      <span className="text-danger ms-2"> (Stock faible)</span>
-                    )}
-                  </div>
-                  <div className="col-md-6 mb-3">
-                    <strong>Alerte Stock Minimum:</strong> {selectedProduit.alerte_stock}
-                  </div>
-                  <div className="col-md-6 mb-3">
-                    <strong>Date d'Expiration:</strong> {selectedProduit.date_expiration || '-'}
-                  </div>
-                  <div className="col-md-6 mb-3">
-                    <strong>Image:</strong>
-                    {selectedProduit.image ? (
-                      <img
-                        src={`${apiUrl}/storage/${selectedProduit.image}`}
-                        alt={selectedProduit.nomProduit}
-                        style={{
-                          width: '100px',
-                          height: '100px',
-                          objectFit: 'cover',
-                          marginLeft: '10px',
+                    <div className="d-flex justify-content-end">
+                      <button
+                        type="button"
+                        className="btn btn-secondary me-2"
+                        onClick={() => {
+                          setShowPopup(false);
+                          setErrors({});
                         }}
-                      />
-                    ) : (
-                      ' Aucune image'
-                    )}
-                  </div>
-                  <div className="col-md-12 mb-3">
-                    <strong>Description:</strong> {selectedProduit.description || '-'}
-                  </div>
+                      >
+                        Annuler
+                      </button>
+                      <button
+                        type="submit"
+                        className="btn btn-primary"
+                        disabled={
+                          !(
+                            newProduit.nom &&
+                            (newProduit.prix_achat || newProduit.prix_achat === 0) &&
+                            (newProduit.prix_vente || newProduit.prix_vente === 0) &&
+                            (newProduit.stock || newProduit.stock === 0)
+                          )
+                        }
+                      >
+                        Ajouter
+                      </button>
+                    </div>
+                  </form>
                 </div>
               </div>
-              <div className="modal-footer">
-                <button
-                  type="button"
-                  className="btn btn-secondary"
-                  onClick={() => setShowDetailPopup(false)}
-                >
-                  Fermer
-                </button>
-              </div>
             </div>
           </div>
-        </div>
-      )}
-      {showDeletePopup && produitToDelete && (
-        <div
-          className="modal d-block"
-          style={{ backgroundColor: 'rgba(0,0,0,0.5)' }}
-          onClick={() => setShowDeletePopup(false)}
-        >
+        )}
+        {showEditPopup && editProduit && (
           <div
-            className="modal-dialog"
-            onClick={(e) => e.stopPropagation()}
+            className="modal d-block"
+            style={{ backgroundColor: 'rgba(0,0,0,0.5)' }}
+            onClick={() => setShowEditPopup(false)}
           >
-            <div className="modal-content">
-              <div className="modal-header">
-                <h5 className="modal-title">Confirmer la Suppression</h5>
-                <button
-                  type="button"
-                  className="btn-close"
-                  onClick={() => setShowDeletePopup(false)}
-                ></button>
-              </div>
-              <div className="modal-body">
-                <p>
-                  Êtes-vous sûr de vouloir supprimer le produit{' '}
-                  <strong>{produitToDelete.nomProduit || 'Inconnu'}</strong> ? Cette action est irréversible.
-                </p>
-              </div>
-              <div className="modal-footer">
-                <button
-                  type="button"
-                  className="btn btn-secondary"
-                  onClick={() => setShowDeletePopup(false)}
-                >
-                  Annuler
-                </button>
-                <button
-                  type="button"
-                  className="btn btn-danger"
-                  onClick={() => handleDeleteClick(produitToDelete.id)}
-                >
-                  Supprimer
-                </button>
+            <div
+              className="modal-dialog modal-lg"
+              onClick={(e) => e.stopPropagation()}
+            >
+              <div className="modal-content">
+                <div className="modal-header">
+                  <h5 className="modal-title">Modifier le Produit: {editProduit.nom}</h5>
+                  <button
+                    type="button"
+                    className="btn-close"
+                    onClick={() => {
+                      setShowEditPopup(false);
+                      setErrors({});
+                    }}
+                  ></button>
+                </div>
+                <div className="modal-body">
+                  {errorMessage && (
+                    <div className="alert alert-danger" role="alert">
+                      {errorMessage}
+                    </div>
+                  )}
+                  <form onSubmit={handleEditProduit}>
+                    <div className="row">
+                      <div className="col-md-6 mb-3">
+                        <label className="form-label">Nom du Produit</label>
+                        <input
+                          type="text"
+                          className={`form-control ${errors.nom ? 'is-invalid' : ''}`}
+                          name="nom"
+                          value={editProduit.nom}
+                          onChange={handleEditInputChange}
+                          required
+                        />
+                        {errors.nom && <div className="invalid-feedback">{errors.nom}</div>}
+                      </div>
+                      <div className="col-md-6 mb-3">
+                        <label className="form-label">Catégorie (optionnel)</label>
+                        <select
+                          className="form-control"
+                          name="categorie_id"
+                          value={editProduit.categorie_id}
+                          onChange={handleEditInputChange}
+                        >
+                          <option value="">Sélectionner une catégorie</option>
+                          {categories.map((categorie) => (
+                            <option key={categorie.id} value={categorie.id}>
+                              {categorie.nom}
+                            </option>
+                          ))}
+                        </select>
+                      </div>
+                      <div className="col-md-6 mb-3">
+                        <label className="form-label">Fournisseur (optionnel)</label>
+                        <select
+                          className="form-control"
+                          name="fournisseur_id"
+                          value={editProduit.fournisseur_id}
+                          onChange={handleEditInputChange}
+                        >
+                          <option value="">Sélectionner un fournisseur</option>
+                          {fournisseurs.map((fournisseur) => (
+                            <option key={fournisseur.id} value={fournisseur.id}>
+                              {fournisseur.nom_societe || fournisseur.nom}
+                            </option>
+                          ))}
+                        </select>
+                      </div>
+                      <div className="col-md-6 mb-3">
+                        <label className="form-label">Prix d'Achat (DH)</label>
+                        <input
+                          type="number"
+                          className={`form-control ${errors.prix_achat ? 'is-invalid' : ''}`}
+                          name="prix_achat"
+                          value={editProduit.prix_achat}
+                          onChange={handleEditInputChange}
+                          step="0.01"
+                          min="0"
+                          required
+                        />
+                        {errors.prix_achat && <div className="invalid-feedback">{errors.prix_achat}</div>}
+                      </div>
+                      <div className="col-md-6 mb-3">
+                        <label className="form-label">Prix de Vente (DH)</label>
+                        <input
+                          type="number"
+                          className={`form-control ${errors.prix_vente ? 'is-invalid' : ''}`}
+                          name="prix_vente"
+                          value={editProduit.prix_vente}
+                          onChange={handleEditInputChange}
+                          step="0.01"
+                          min="0"
+                          required
+                        />
+                        {errors.prix_vente && <div className="invalid-feedback">{errors.prix_vente}</div>}
+                      </div>
+                      <div className="col-md-6 mb-3">
+                        <label className="form-label">Stock disponible</label>
+                        <input
+                          type="number"
+                          className={`form-control ${errors.stock ? 'is-invalid' : ''}`}
+                          name="stock"
+                          value={editProduit.stock}
+                          onChange={handleEditInputChange}
+                          min="0"
+                          required
+                        />
+                        {errors.stock && <div className="invalid-feedback">{errors.stock}</div>}
+                      </div>
+                      <div className="col-md-6 mb-3">
+                        <label className="form-label">Alerte Stock Minimum</label>
+                        <input
+                          type="number"
+                          className="form-control"
+                          name="alerte_stock"
+                          value={editProduit.alerte_stock}
+                          onChange={handleEditInputChange}
+                          min="0"
+                        />
+                      </div>
+                      <div className="col-md-6 mb-3">
+                        <label className="form-label">Date d'Expiration</label>
+                        <input
+                          type="date"
+                          className="form-control"
+                          name="date_expiration"
+                          value={editProduit.date_expiration}
+                          onChange={handleEditInputChange}
+                        />
+                      </div>
+                      <div className="col-md-6 mb-3">
+                        <label className="form-label">Image du Produit</label>
+                        <input
+                          type="file"
+                          className="form-control"
+                          accept="image/*"
+                          onChange={(e) => handleImageUpload(e, true)}
+                        />
+                        {editProduit.image && typeof editProduit.image === 'string' && (
+                          <img
+                            src={`${apiUrl}/storage/${editProduit.image}`}
+                            alt="Preview"
+                            style={{
+                              width: '100px',
+                              height: '100px',
+                              objectFit: 'cover',
+                              marginTop: '10px',
+                            }}
+                          />
+                        )}
+                      </div>
+                      <div className="col-md-12 mb-3">
+                        <label className="form-label">Description</label>
+                        <textarea
+                          className="form-control"
+                          name="description"
+                          value={editProduit.description}
+                          onChange={handleEditInputChange}
+                          rows="4"
+                        ></textarea>
+                      </div>
+                    </div>
+                    <div className="d-flex justify-content-end">
+                      <button
+                        type="button"
+                        className="btn btn-secondary me-2"
+                        onClick={() => {
+                          setShowEditPopup(false);
+                          setErrors({});
+                        }}
+                      >
+                        Annuler
+                      </button>
+                      <button
+                        type="submit"
+                        className="btn btn-primary"
+                        disabled={!isEditFormValid}
+                      >
+                        Enregistrer
+                      </button>
+                    </div>
+                  </form>
+                </div>
               </div>
             </div>
           </div>
-        </div>
-      )}
+        )}
+        {showDetailPopup && selectedProduit && (
+          <div
+            className="modal d-block"
+            style={{ backgroundColor: 'rgba(0,0,0,0.5)' }}
+            onClick={() => setShowDetailPopup(false)}
+          >
+            <div
+              className="modal-dialog modal-lg"
+              onClick={(e) => e.stopPropagation()}
+            >
+              <div className="modal-content">
+                <div className="modal-header">
+                  <h5 className="modal-title">Détails du Produit: {selectedProduit.nomProduit || 'Inconnu'}</h5>
+                  <button
+                    type="button"
+                    className="btn-close"
+                    onClick={() => setShowDetailPopup(false)}
+                  ></button>
+                </div>
+                <div className="modal-body">
+                  <div className="row">
+                    <div className="col-md-6 mb-3">
+                      <strong>ID:</strong> {selectedProduit.id}
+                    </div>
+                    <div className="col-md-6 mb-3">
+                      <strong>Nom:</strong> {selectedProduit.nomProduit || 'Inconnu'}
+                    </div>
+                    <div className="col-md-6 mb-3">
+                      <strong>Catégorie:</strong> {selectedProduit.categorie ? selectedProduit.categorie.nom : getCategorieName(selectedProduit.categorie_id)}
+                    </div>
+                    <div className="col-md-6 mb-3">
+                      <strong>Fournisseur:</strong> {getFournisseurName(selectedProduit.fournisseur_id)}
+                    </div>
+                    <div className="col-md-6 mb-3">
+                      <strong>Prix d'Achat (DH):</strong> {Number(selectedProduit.prix_achat).toFixed(2)}
+                    </div>
+                    <div className="col-md-6 mb-3">
+                      <strong>Prix de Vente (DH):</strong> {Number(selectedProduit.prix_vente).toFixed(2)}
+                    </div>
+                    <div className="col-md-6 mb-3">
+                      <strong>Stock disponible:</strong> {selectedProduit.stock}
+                      {selectedProduit.stock <= selectedProduit.alerte_stock && (
+                        <span className="text-danger ms-2"> (Stock faible)</span>
+                      )}
+                    </div>
+                    <div className="col-md-6 mb-3">
+                      <strong>Alerte Stock Minimum:</strong> {selectedProduit.alerte_stock}
+                    </div>
+                    <div className="col-md-6 mb-3">
+                      <strong>Date d'Expiration:</strong> {selectedProduit.date_expiration || '-'}
+                    </div>
+                    <div className="col-md-6 mb-3">
+                      <strong>Image:</strong>
+                      {selectedProduit.image ? (
+                        <img
+                          src={`${apiUrl}/storage/${selectedProduit.image}`}
+                          alt={selectedProduit.nomProduit}
+                          style={{
+                            width: '100px',
+                            height: '100px',
+                            objectFit: 'cover',
+                            marginLeft: '10px',
+                          }}
+                        />
+                      ) : (
+                        ' Aucune image'
+                      )}
+                    </div>
+                    <div className="col-md-12 mb-3">
+                      <strong>Description:</strong> {selectedProduit.description || '-'}
+                    </div>
+                  </div>
+                </div>
+                <div className="modal-footer">
+                  <button
+                    type="button"
+                    className="btn btn-secondary"
+                    onClick={() => setShowDetailPopup(false)}
+                  >
+                    Fermer
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
+        {showDeletePopup && produitToDelete && (
+          <div
+            className="modal d-block"
+            style={{ backgroundColor: 'rgba(0,0,0,0.5)' }}
+            onClick={() => setShowDeletePopup(false)}
+          >
+            <div
+              className="modal-dialog"
+              onClick={(e) => e.stopPropagation()}
+            >
+              <div className="modal-content">
+                <div className="modal-header">
+                  <h5 className="modal-title">Confirmer la Suppression</h5>
+                  <button
+                    type="button"
+                    className="btn-close"
+                    onClick={() => setShowDeletePopup(false)}
+                  ></button>
+                </div>
+                <div className="modal-body">
+                  <p>
+                    Êtes-vous sûr de vouloir supprimer le produit{' '}
+                    <strong>{produitToDelete.nomProduit || 'Inconnu'}</strong> ? Cette action est irréversible.
+                  </p>
+                </div>
+                <div className="modal-footer">
+                  <button
+                    type="button"
+                    className="btn btn-secondary"
+                    onClick={() => setShowDeletePopup(false)}
+                  >
+                    Annuler
+                  </button>
+                  <button
+                    type="button"
+                    className="btn btn-danger"
+                    onClick={() => handleDeleteClick(produitToDelete.id)}
+                  >
+                    Supprimer
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
+      </div>
     </Layout>
   );
 };
