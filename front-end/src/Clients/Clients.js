@@ -173,6 +173,8 @@ const Clients = () => {
         setErrors(errors);
         const errorMessages = Object.values(errors).flat().join(' ');
         setErrorMessage(`Failed to add client: ${errorMessages}`);
+      } else if (error.response?.status === 403) {
+        setErrorMessage('Unauthorized: You must be an Admin to add clients.');
       } else {
         setErrorMessage('Failed to add client: ' + (error.response?.data?.message || 'Unknown error'));
       }
@@ -202,6 +204,8 @@ const Clients = () => {
         setErrors(errors);
         const errorMessages = Object.values(errors).flat().join(' ');
         setErrorMessage(`Failed to update client: ${errorMessages}`);
+      } else if (error.response?.status === 403) {
+        setErrorMessage('Unauthorized: You must be an Admin to update clients.');
       } else {
         setErrorMessage('Failed to update client: ' + (error.response?.data?.message || 'Unknown error'));
       }
@@ -462,52 +466,51 @@ const Clients = () => {
                         <td onClick={() => handleClientClick(client)} style={{ cursor: 'pointer' }}>{client.email}</td>
                         <td onClick={() => handleClientClick(client)} style={{ cursor: 'pointer' }}>{client.telephone}</td>
                         <td onClick={(e) => e.stopPropagation()}>
-                          {currentUser.role !== 'User' && (
-                            <>
-                              <button 
-                                className="btn btn-primary me-2"
-                                style={{
-                                  backgroundColor: '#007bff',
-                                  borderColor: '#007bff',
-                                  padding: '6px 12px',
-                                  fontSize: '14px',
-                                  minWidth: '80px'
-                                }}
-                                onClick={(e) => handleEditClick(e, client)}
-                                title="Éditer"
-                              >
-                                <i className="bi bi-pencil me-1"></i> Éditer
-                              </button>
-                              <button 
-                                className="btn btn-danger me-2"
-                                style={{
-                                  backgroundColor: '#dc3545',
-                                  borderColor: '#dc3545',
-                                  padding: '6px 12px',
-                                  fontSize: '14px',
-                                  minWidth: '80px'
-                                }}
-                                onClick={(e) => handleDeleteClick(e, client)}
-                                title="Supprimer"
-                              >
-                                <i className="bi bi-trash me-1"></i> Supprimer
-                              </button>
-                              <button 
-                                className="btn btn-info"
-                                style={{
-                                  backgroundColor: '#17a2b8',
-                                  borderColor: '#17a2b8',
-                                  padding: '6px 12px',
-                                  fontSize: '14px',
-                                  minWidth: '80px'
-                                }}
-                                onClick={(e) => handleOrdersClick(e, client)}
-                                title="Voir Commandes"
-                              >
-                                <i className="bi bi-cart me-1"></i> Commandes
-                              </button>
-                            </>
-                          )}
+                          {console.log('User Role:', currentUser?.role, 'Permissions:', currentUser?.permissions)}
+                          <>
+                            <button 
+                              className="btn btn-primary me-2"
+                              style={{
+                                backgroundColor: '#007bff',
+                                borderColor: '#007bff',
+                                padding: '6px 12px',
+                                fontSize: '14px',
+                                minWidth: '80px'
+                              }}
+                              onClick={(e) => handleEditClick(e, client)}
+                              title="Éditer"
+                            >
+                              <i className="bi bi-pencil me-1"></i> Éditer
+                            </button>
+                            <button 
+                              className="btn btn-danger me-2"
+                              style={{
+                                backgroundColor: '#dc3545',
+                                borderColor: '#dc3545',
+                                padding: '6px 12px',
+                                fontSize: '14px',
+                                minWidth: '80px'
+                              }}
+                              onClick={(e) => handleDeleteClick(e, client)}
+                              title="Supprimer"
+                            >
+                              <i className="bi bi-trash me-1"></i> Supprimer
+                            </button>
+                            <button 
+                              className="btn btn-info"
+                              style={{
+                                backgroundColor: '#17a2b8',
+                                borderColor: '#17a2b8',
+                                padding: '6px 12px',
+                                fontSize: '14px',
+                                minWidth: '80px'
+                              }}
+                              onClick={(e) => handleOrdersClick(e, client)}
+                              title="Voir Commandes"
+                            >
+                              <i className="bi bi-cart me-1"></i> Commandes
+                            </button>
+                          </>
                         </td>
                       </tr>
                     ))

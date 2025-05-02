@@ -48,6 +48,7 @@ const Commandes = () => {
         const userResponse = await api.get('/user');
         const user = userResponse.data;
         setCurrentUser(user);
+        console.log('User Role:', user?.role, 'Permissions:', user?.permissions);
 
         if (!user.permissions.commandes) {
           navigate('/dashboard');
@@ -615,10 +616,11 @@ const Commandes = () => {
         <div className="d-flex justify-content-between align-items-center mb-4">
           <h1>Commandes</h1>
           <div>
-            {currentUser.role !== 'User' && (
+            {currentUser?.role !== 'User' && (
               <button
                 className="btn btn-primary me-2"
                 onClick={() => setShowPopup(true)}
+                disabled={currentUser?.role === 'User'}
               >
                 <i className="bi bi-plus-circle me-2"></i>Ajouter Commande
               </button>
@@ -682,22 +684,27 @@ const Commandes = () => {
                         <td onClick={() => handleCommandeClick(commande)} style={{ cursor: 'pointer' }}>{commande.status}</td>
                         <td onClick={() => handleCommandeClick(commande)} style={{ cursor: 'pointer' }}>{commande.paymentStatus}</td>
                         <td onClick={(e) => e.stopPropagation()}>
-                          {currentUser.role !== 'User' && (
-                            <>
-                              <button
-                                className="btn btn-primary me-2"
-                                onClick={(e) => handleEditClick(e, commande)}
-                              >
-                                <i className="bi bi-pencil"></i> Éditer
-                              </button>
-                              <button
-                                className="btn btn-danger"
-                                onClick={(e) => handleDeleteClick(e, commande.id)}
-                              >
-                                <i className="bi bi-trash"></i> Supprimer
-                              </button>
-                            </>
-                          )}
+                          {console.log('User Role:', currentUser?.role, 'Permissions:', currentUser?.permissions)}
+                          <>
+                            <button
+                              className="btn btn-primary me-2"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                handleEditClick(e, commande);
+                              }}
+                            >
+                              <i className="bi bi-pencil"></i> Éditer
+                            </button>
+                            <button
+                              className="btn btn-danger"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                handleDeleteClick(e, commande.id);
+                              }}
+                            >
+                              <i className="bi bi-trash"></i> Supprimer
+                            </button>
+                          </>
                         </td>
                       </tr>
                     ))
@@ -1129,22 +1136,22 @@ const Commandes = () => {
                       ))}
                     </tbody>
                   </table>
-                  <div className="modal-footer">
-                    <button
-                      type="button"
-                      className="btn btn-secondary"
-                      onClick={() => setShowDetailPopup(false)}
-                    >
-                      Fermer
-                    </button>
-                    <button
-                      type="button"
-                      className="btn btn-success"
-                      onClick={() => handleDownloadBonCommande(selectedCommande)}
-                    >
-                      Télécharger Bon de Commande
-                    </button>
-                  </div>
+                </div>
+                <div className="modal-footer">
+                  <button
+                    type="button"
+                    className="btn btn-secondary"
+                    onClick={() => setShowDetailPopup(false)}
+                  >
+                    Fermer
+                  </button>
+                  <button
+                    type="button"
+                    className="btn btn-success"
+                    onClick={() => handleDownloadBonCommande(selectedCommande)}
+                  >
+                    Télécharger Bon de Commande
+                  </button>
                 </div>
               </div>
             </div>
